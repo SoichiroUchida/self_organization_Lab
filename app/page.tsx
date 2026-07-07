@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import ExportPanel from './ExportPanel';
 import {
   ChladniPlate,
   ConvectionCell,
@@ -313,6 +314,10 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
   const model = MODELS.find((m) => m.id === modelId)!;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [running, setRunning] = useState(true);
+  const [showExport, setShowExport] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth > 680 : true
+  );
 
   // Model refs
   const chladniRef  = useRef<ChladniPlate | null>(null);
@@ -489,15 +494,20 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <header style={{
-        display:'flex',alignItems:'center',gap:16,padding:'14px 28px',
-        borderBottom:'1px solid var(--border)',background:'rgba(6,6,10,0.85)',
-        backdropFilter:'blur(12px)',position:'sticky',top:0,zIndex:50,
-      }}>
+      {showExport && (
+        <ExportPanel
+          sourceCanvas={canvasRef.current}
+          onClose={() => setShowExport(false)}
+          accent={model.accent}
+        />
+      )}
+
+      {/* ── Header ── */}
+      <header className="sim-header">
         <button onClick={onBack} style={{
-          display:'flex',alignItems:'center',gap:6,padding:'6px 14px',borderRadius:8,
+          display:'flex',alignItems:'center',gap:5,padding:'6px 12px',borderRadius:8,
           border:'1px solid rgba(255,255,255,0.1)',background:'transparent',color:'#94a3b8',
-          fontSize:13,cursor:'pointer',fontWeight:500,transition:'all 0.15s ease',
+          fontSize:13,cursor:'pointer',fontWeight:500,transition:'all 0.15s ease',flexShrink:0,
         }}
           onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color='#e2e8f0'; (e.currentTarget as HTMLButtonElement).style.borderColor='rgba(255,255,255,0.2)'; }}
           onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color='#94a3b8'; (e.currentTarget as HTMLButtonElement).style.borderColor='rgba(255,255,255,0.1)'; }}
@@ -505,21 +515,24 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path d="M10 7H4M6 3L2 7l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
-          Gallery
+          <span className="btn-pill-label">Gallery</span>
         </button>
-        <div style={{ flex:1 }}>
-          <div style={{ display:'flex',alignItems:'center',gap:10 }}>
-            <span className="tag" style={{ color:model.accent,borderColor:`${model.accent}40`,background:model.accentBg }}>
-              {model.principle}
-            </span>
-            <h1 style={{ fontSize:18,fontWeight:700,color:'#f1f5f9' }}>{model.name}</h1>
-          </div>
+
+        <div className="sim-header-title">
+          <span className="tag" style={{ color:model.accent,borderColor:`${model.accent}40`,background:model.accentBg,flexShrink:0 }}>
+            {model.principle}
+          </span>
+          <h1>{model.name}</h1>
         </div>
-        <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+
+        <div className="sim-header-actions">
           {running && <div className="live-dot" />}
           <button onClick={resetCurrent} className="btn-pill"
             style={{ background:'rgba(255,255,255,0.04)',color:'#94a3b8',borderColor:'rgba(255,255,255,0.12)' }}>
-            Reset
+            <span className="btn-pill-label">Reset</span>
+            <svg className="btn-pill-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+              <path d="M1.5 6a4.5 4.5 0 1 0 1-2.78M1.5 2v2h2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </button>
           <button onClick={() => setRunning(!running)} className="btn-pill"
             style={{
@@ -527,22 +540,40 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
               color: running?'#fbbf24':'#34d399',
               borderColor: running?'rgba(251,191,36,0.25)':'rgba(52,211,153,0.25)',
             }}>
-            {running ? 'Pause' : 'Resume'}
+            <span className="btn-pill-label">{running ? 'Pause' : 'Resume'}</span>
+            {running
+              ? <svg className="btn-pill-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><rect x="2" y="1.5" width="3" height="9" rx="1" fill="currentColor"/><rect x="7" y="1.5" width="3" height="9" rx="1" fill="currentColor"/></svg>
+              : <svg className="btn-pill-icon" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
+            }
+          </button>
+          <button onClick={() => setShowExport(true)} className="btn-pill"
+            style={{ background:`${model.accent}14`,color:model.accent,borderColor:`${model.accent}40` }}>
+            <span className="btn-pill-label">Export</span>
+            <svg className="btn-pill-icon" width="12" height="12" viewBox="0 0 14 14" fill="none" aria-hidden>
+              <path d="M7 1v8M4 6l3 3 3-3M2 11h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          {/* Sidebar toggle — only shown on wider screens via CSS */}
+          <button
+            className={`sidebar-toggle${sidebarOpen ? ' open' : ''}`}
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+          >
+            <span className="btn-pill-label">{sidebarOpen ? 'Hide' : 'Params'}</span>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </button>
         </div>
       </header>
 
-      <main style={{ flex:1,display:'flex',gap:16,padding:'16px 20px',overflow:'hidden' }}>
-        <div style={{ flex:1,display:'flex',flexDirection:'column',gap:16 }}>
-          <div className="sim-panel" style={{
-            flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:24,overflow:'hidden',
-            background:`radial-gradient(ellipse at center, ${model.accentBg} 0%, var(--surface) 70%)`,
-          }}>
-            <canvas ref={canvasRef} style={{
-              maxWidth:'100%',maxHeight:'100%',objectFit:'contain',
-              borderRadius:8,imageRendering:'pixelated',
-              boxShadow:`0 0 40px ${model.accent}22`,
-            }} />
+      {/* ── Main ── */}
+      <main className="sim-main" style={{ flex:1 }}>
+        {/* Canvas column */}
+        <div className="sim-canvas-col">
+          <div className="sim-panel sim-canvas-wrap"
+            style={{ background:`radial-gradient(ellipse at center, ${model.accentBg} 0%, var(--surface) 70%)` }}>
+            <canvas ref={canvasRef}
+              style={{ boxShadow:`0 0 40px ${model.accent}22` }} />
           </div>
           <div className="formula-box" style={{ borderColor:`${model.accent}30`,color:model.accent }}>
             <div style={{ fontSize:10,fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:8,opacity:0.6 }}>
@@ -552,7 +583,9 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
           </div>
         </div>
 
-        <div className="sim-panel" style={{ width:300,padding:24,display:'flex',flexDirection:'column',gap:20,overflowY:'auto' }}>
+        {/* Sidebar */}
+        {sidebarOpen && (
+        <div className="sim-panel sim-sidebar">
           <div>
             <div style={{ fontSize:10,fontWeight:600,letterSpacing:'0.12em',textTransform:'uppercase',color:'#475569',marginBottom:10 }}>
               Description
@@ -729,6 +762,7 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
             )}
           </div>
         </div>
+        )}
       </main>
     </div>
   );
