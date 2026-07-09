@@ -1,3 +1,35 @@
+// ─────────────────────────────────────────────
+// Color mode types & palette utilities
+// ─────────────────────────────────────────────
+export type ColorMode = 'color' | 'grayscale' | 'navy' | 'orange';
+
+// Convert an RGB color to the target palette.
+// navy mode: preserve luminance but shift hue toward navy (#1a2a4a) for dark and light gray for bright.
+// orange mode: same but accent color is orange (#e07020).
+export function applyPalette(r: number, g: number, b: number, mode: ColorMode): [number, number, number] {
+  if (mode === 'color') return [r, g, b];
+  // Luminance (perceived brightness, 0-255)
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  if (mode === 'grayscale') {
+    const v = Math.round(lum);
+    return [v, v, v];
+  }
+  if (mode === 'navy') {
+    // Dark tones → navy, bright tones → near-white
+    const t = lum / 255;
+    const nr = Math.round(26 * (1 - t) + 210 * t);
+    const ng = Math.round(42 * (1 - t) + 220 * t);
+    const nb = Math.round(74 * (1 - t) + 235 * t);
+    return [nr, ng, nb];
+  }
+  // orange mode
+  const t = lum / 255;
+  const nr = Math.round(20 * (1 - t) + 224 * t);
+  const ng = Math.round(15 * (1 - t) + 180 * t);
+  const nb = Math.round(10 * (1 - t) + 120 * t);
+  return [nr, ng, nb];
+}
+
 // 1. 波・共鳴: Chladni Figures
 export class ChladniPlate {
   width: number; height: number;
@@ -27,10 +59,12 @@ export class ChladniPlate {
       if (p.y < 0) p.y = 0; if (p.y > this.height) p.y = this.height;
     }
   }
-  draw(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = '#0f172a';
+  draw(ctx: CanvasRenderingContext2D, _img?: ImageData, mode: ColorMode = 'color') {
+    const [br, bg, bb] = applyPalette(15, 23, 42, mode);
+    const [pr, pg, pb] = applyPalette(226, 232, 240, mode);
+    ctx.fillStyle = `rgb(${br},${bg},${bb})`;
     ctx.fillRect(0, 0, this.width, this.height);
-    ctx.fillStyle = '#e2e8f0';
+    ctx.fillStyle = `rgb(${pr},${pg},${pb})`;
     for (const p of this.particles) ctx.fillRect(p.x, p.y, 1.5, 1.5);
   }
 }
@@ -60,13 +94,16 @@ export class ConvectionCell {
       if (Math.random() < 0.01) this.nextTemp[i] += (Math.random()-0.5)*0.5;
     const tmp = this.temp; this.temp = this.nextTemp; this.nextTemp = tmp;
   }
-  draw(ctx: CanvasRenderingContext2D, imgData: ImageData) {
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
     for (let i = 0; i < this.temp.length; i++) {
       const idx = i*4, t = this.temp[i];
-      imgData.data[idx]   = Math.min(255,Math.max(0,50+t*200));
-      imgData.data[idx+1] = Math.min(255,Math.max(0,50+t*50));
-      imgData.data[idx+2] = Math.min(255,Math.max(0,200-t*150));
-      imgData.data[idx+3] = 255;
+      const [r, g, b] = applyPalette(
+        Math.min(255,Math.max(0,50+t*200)),
+        Math.min(255,Math.max(0,50+t*50)),
+        Math.min(255,Math.max(0,200-t*150)),
+        mode
+      );
+      imgData.data[idx]=r; imgData.data[idx+1]=g; imgData.data[idx+2]=b; imgData.data[idx+3]=255;
     }
     ctx.putImageData(imgData, 0, 0);
   }
@@ -106,16 +143,14 @@ export class ReactionDiffusion {
     let t=this.u; this.u=this.nextU; this.nextU=t;
     t=this.v; this.v=this.nextV; this.nextV=t;
   }
-  draw(ctx: CanvasRenderingContext2D, imgData: ImageData) {
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
     let minV=1,maxV=0;
     for (let i=0;i<this.v.length;i++){if(this.v[i]<minV)minV=this.v[i];if(this.v[i]>maxV)maxV=this.v[i];}
     const range=Math.max(maxV-minV,0.001);
     for (let i=0;i<this.u.length;i++){
       const t=(this.v[i]-minV)/range, idx=i*4;
-      imgData.data[idx]=Math.floor(t*20);
-      imgData.data[idx+1]=Math.floor(20+t*235);
-      imgData.data[idx+2]=Math.floor(30+t*180);
-      imgData.data[idx+3]=255;
+      const [r,g,b]=applyPalette(Math.floor(t*20),Math.floor(20+t*235),Math.floor(30+t*180),mode);
+      imgData.data[idx]=r; imgData.data[idx+1]=g; imgData.data[idx+2]=b; imgData.data[idx+3]=255;
     }
     ctx.putImageData(imgData,0,0);
   }
@@ -154,19 +189,21 @@ export class BucklingChain {
       }
     }
   }
-  draw(ctx: CanvasRenderingContext2D) {
+  draw(ctx: CanvasRenderingContext2D, _img?: ImageData, mode: ColorMode = 'color') {
     const N=this.N, cw=this.width/N, ch=this.height/N;
     let maxW=1e-4;
     for (let i=0;i<this.w.length;i++){const a=Math.abs(this.w[i]);if(a>maxW)maxW=a;}
     for (let y=0;y<N;y++) for (let x=0;x<N;x++){
       const t=this.w[y*N+x]/maxW;
-      let r,g,b;
-      if(t>=0){r=Math.floor(15+t*225);g=Math.floor(5+t*65);b=Math.floor(20+t*15);}
-      else{const s=-t;r=Math.floor(10+s*50);g=Math.floor(5+s*15);b=Math.floor(20+s*220);}
+      let cr,cg,cb;
+      if(t>=0){cr=Math.floor(15+t*225);cg=Math.floor(5+t*65);cb=Math.floor(20+t*15);}
+      else{const s=-t;cr=Math.floor(10+s*50);cg=Math.floor(5+s*15);cb=Math.floor(20+s*220);}
+      const [r,g,b]=applyPalette(cr,cg,cb,mode);
       ctx.fillStyle=`rgb(${r},${g},${b})`;
       ctx.fillRect(Math.floor(x*cw),Math.floor(y*ch),Math.ceil(cw)+1,Math.ceil(ch)+1);
     }
-    ctx.strokeStyle='rgba(255,255,255,0.22)'; ctx.lineWidth=0.8;
+    const [sr,sg,sb]=applyPalette(255,255,255,mode);
+    ctx.strokeStyle=`rgba(${sr},${sg},${sb},0.22)`; ctx.lineWidth=0.8;
     for (let y=0;y<N-1;y++) for (let x=0;x<N-1;x++){
       const a=this.w[y*N+x],b2=this.w[y*N+x+1],c=this.w[(y+1)*N+x];
       if(a*b2<0){const fx=(x+a/(a-b2))*cw;ctx.beginPath();ctx.moveTo(fx,y*ch);ctx.lineTo(fx,(y+1)*ch);ctx.stroke();}
@@ -201,14 +238,37 @@ export class VoronoiRelaxation {
       this.points[i].x+=fx*lr; this.points[i].y+=fy*lr;
     }
   }
-  draw(ctx: CanvasRenderingContext2D) {
+  draw(ctx: CanvasRenderingContext2D, _img?: ImageData, mode: ColorMode = 'color') {
     const res=8;
     for(let y=0;y<this.height;y+=res) for(let x=0;x<this.width;x+=res){
       let minDist=Infinity,pt=this.points[0];
       for(const p of this.points){const d=(p.x-x)**2+(p.y-y)**2;if(d<minDist){minDist=d;pt=p;}}
-      ctx.fillStyle=pt.color; ctx.fillRect(x,y,res,res);
+      if(mode==='color'){ctx.fillStyle=pt.color;}
+      else{
+        // parse hsl from color string
+        const m=pt.color.match(/hsl\((\d+(?:\.\d+)?),(\d+)%,(\d+)%\)/);
+        if(m){
+          const [,,sl,ll]=[0,...m].map(Number);
+          const h=Number(m[1])/360, s=sl/100, l=ll/100;
+          const q=l<0.5?l*(1+s):l+s-l*s, p2=2*l-q;
+          const hue2rgb=(p3:number,q3:number,t3:number)=>{
+            let t=((t3%1)+1)%1;
+            if(t<1/6)return p3+(q3-p3)*6*t;
+            if(t<1/2)return q3;
+            if(t<2/3)return p3+(q3-p3)*(2/3-t)*6;
+            return p3;
+          };
+          const cr=Math.round(hue2rgb(p2,q,h+1/3)*255);
+          const cg=Math.round(hue2rgb(p2,q,h)*255);
+          const cb=Math.round(hue2rgb(p2,q,h-1/3)*255);
+          const [r,g,b]=applyPalette(cr,cg,cb,mode);
+          ctx.fillStyle=`rgb(${r},${g},${b})`;
+        } else { ctx.fillStyle=pt.color; }
+      }
+      ctx.fillRect(x,y,res,res);
     }
-    ctx.fillStyle='#000';
+    const [dr,dg,db]=applyPalette(0,0,0,mode);
+    ctx.fillStyle=`rgb(${dr},${dg},${db})`;
     for(const p of this.points){ctx.beginPath();ctx.arc(p.x,p.y,3,0,Math.PI*2);ctx.fill();}
   }
 }
@@ -231,10 +291,11 @@ export class IsingModel {
       if(dE<=0||Math.random()<Math.exp(-dE/params.T)) this.spins[idx]*=-1;
     }
   }
-  draw(ctx: CanvasRenderingContext2D, imgData: ImageData) {
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
     for(let i=0;i<this.spins.length;i++){
       const val=this.spins[i]===1?255:30, idx=i*4;
-      imgData.data[idx]=val;imgData.data[idx+1]=val;imgData.data[idx+2]=val;imgData.data[idx+3]=255;
+      const [r,g,b]=applyPalette(val,val,val,mode);
+      imgData.data[idx]=r;imgData.data[idx+1]=g;imgData.data[idx+2]=b;imgData.data[idx+3]=255;
     }
     ctx.putImageData(imgData,0,0);
   }
@@ -266,9 +327,11 @@ export class VicsekModel {
       if(p.y<0)p.y+=this.height; if(p.y>=this.height)p.y-=this.height;
     }
   }
-  draw(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle='#0f172a'; ctx.fillRect(0,0,this.width,this.height);
-    ctx.fillStyle='#38bdf8';
+  draw(ctx: CanvasRenderingContext2D, _img?: ImageData, mode: ColorMode = 'color') {
+    const [br,bg,bb]=applyPalette(15,23,42,mode);
+    const [pr,pg,pb]=applyPalette(56,189,248,mode);
+    ctx.fillStyle=`rgb(${br},${bg},${bb})`; ctx.fillRect(0,0,this.width,this.height);
+    ctx.fillStyle=`rgb(${pr},${pg},${pb})`;
     for(const p of this.particles){
       ctx.beginPath();
       ctx.moveTo(p.x+Math.cos(p.a)*6,p.y+Math.sin(p.a)*6);
@@ -372,12 +435,12 @@ export class CrystalGrowth {
       this._spawnOne();
   }
 
-  draw(ctx: CanvasRenderingContext2D) {
+  draw(ctx: CanvasRenderingContext2D, _img?: ImageData, mode: ColorMode = 'color') {
     const W=this.width, H=this.height;
-    ctx.fillStyle='#020510';
+    const [br,bg,bb]=applyPalette(2,5,16,mode);
+    ctx.fillStyle=`rgb(${br},${bg},${bb})`;
     ctx.fillRect(0,0,W,H);
 
-    // 結晶をグラデーションで描画（核からの距離で色を変える）
     const imgData=ctx.createImageData(W,H);
     const cx=Math.floor(W/2), cy=Math.floor(H/2);
     const maxDist=Math.sqrt(cx*cx+cy*cy);
@@ -385,20 +448,20 @@ export class CrystalGrowth {
       const i=y*W+x;
       if(this.grid[i]===1){
         const dist=Math.sqrt((x-cx)**2+(y-cy)**2)/maxDist;
-        // 内側=白~青、外側=青~紫のグラデーション (デンドライト的)
-        const r=Math.floor(180*(1-dist)+100*dist);
-        const g=Math.floor(220*(1-dist)+80*dist);
-        const b=Math.floor(255);
+        const cr=Math.floor(180*(1-dist)+100*dist);
+        const cg=Math.floor(220*(1-dist)+80*dist);
+        const cb=Math.floor(255);
+        const [r,g,b]=applyPalette(cr,cg,cb,mode);
         imgData.data[i*4]=r; imgData.data[i*4+1]=g; imgData.data[i*4+2]=b; imgData.data[i*4+3]=255;
       } else {
-        imgData.data[i*4]=2; imgData.data[i*4+1]=5; imgData.data[i*4+2]=16; imgData.data[i*4+3]=255;
+        imgData.data[i*4]=br; imgData.data[i*4+1]=bg; imgData.data[i*4+2]=bb; imgData.data[i*4+3]=255;
       }
     }
     ctx.putImageData(imgData,0,0);
 
-    // ウォーカー（拡散粒子）を薄く表示
+    const [wr,wg,wb]=applyPalette(100,150,255,mode);
     for(const w of this.walkers){
-      ctx.fillStyle='rgba(100,150,255,0.25)';
+      ctx.fillStyle=`rgba(${wr},${wg},${wb},0.25)`;
       ctx.fillRect(w.x,w.y,1,1);
     }
   }
@@ -450,24 +513,22 @@ export class CahnHilliard {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, imgData: ImageData) {
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
     const N=this.N;
     const scaleX=Math.floor(imgData.width/N), scaleY=Math.floor(imgData.height/N);
-    // A相(φ<0)=深い青、B相(φ>0)=暖かいオレンジ、界面=白
     for(let y=0;y<N;y++) for(let x=0;x<N;x++){
       const t=Math.max(-1,Math.min(1,this.phi[y*N+x]));
-      let r,g,b;
-      if(t>0){r=Math.floor(240*t+20*(1-t));g=Math.floor(120*t+20*(1-t));b=Math.floor(10*t+20*(1-t));}
-      else{const s=-t;r=Math.floor(20*(1-s)+5*s);g=Math.floor(80*(1-s)+30*s);b=Math.floor(180*(1-s)+240*s);}
-      // 界面強調
+      let cr,cg,cb;
+      if(t>0){cr=Math.floor(240*t+20*(1-t));cg=Math.floor(120*t+20*(1-t));cb=Math.floor(10*t+20*(1-t));}
+      else{const s=-t;cr=Math.floor(20*(1-s)+5*s);cg=Math.floor(80*(1-s)+30*s);cb=Math.floor(180*(1-s)+240*s);}
       const near=1-Math.abs(t);
-      r=Math.floor(r+near*180); g=Math.floor(g+near*180); b=Math.floor(b+near*180);
+      cr=Math.floor(cr+near*180); cg=Math.floor(cg+near*180); cb=Math.floor(cb+near*180);
+      const [r,g,b]=applyPalette(Math.min(255,cr),Math.min(255,cg),Math.min(255,cb),mode);
       for(let dy=0;dy<scaleY;dy++) for(let dx=0;dx<scaleX;dx++){
         const px=x*scaleX+dx, py=y*scaleY+dy;
         if(px<imgData.width&&py<imgData.height){
           const i=(py*imgData.width+px)*4;
-          imgData.data[i]=Math.min(255,r); imgData.data[i+1]=Math.min(255,g);
-          imgData.data[i+2]=Math.min(255,b); imgData.data[i+3]=255;
+          imgData.data[i]=r; imgData.data[i+1]=g; imgData.data[i+2]=b; imgData.data[i+3]=255;
         }
       }
     }
@@ -534,17 +595,19 @@ export class ExcitableMedia {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D, imgData: ImageData) {
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
     const N=this.N;
     const scaleX=Math.floor(imgData.width/N), scaleY=Math.floor(imgData.height/N);
     for(let y=0;y<N;y++) for(let x=0;x<N;x++){
       const u=this.u[y*N+x], v=this.v[y*N+x];
-      // u: -1..2 → 色: 静止=暗紺、興奮=明るい黄緑、回復=紫
       const un=Math.max(0,Math.min(1,(u+1)/3));
       const vn=Math.max(0,Math.min(1,(v+0.5)/2));
-      const r=Math.floor(un*255*(1-vn*0.5));
-      const g=Math.floor(un*240);
-      const b=Math.floor(30+vn*180*(1-un));
+      const [r,g,b]=applyPalette(
+        Math.floor(un*255*(1-vn*0.5)),
+        Math.floor(un*240),
+        Math.floor(30+vn*180*(1-un)),
+        mode
+      );
       for(let dy=0;dy<scaleY;dy++) for(let dx=0;dx<scaleX;dx++){
         const px=x*scaleX+dx, py=y*scaleY+dy;
         if(px<imgData.width&&py<imgData.height){
@@ -582,18 +645,32 @@ export class NematicLC {
       if(dE<0||Math.random()<Math.exp(-dE/J)) this.theta[i]=((thNew%Math.PI)+Math.PI)%Math.PI;
     }
   }
-  draw(ctx: CanvasRenderingContext2D, imgData: ImageData) {
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
     const N=this.size;
-    for(let i=0;i<imgData.data.length;i+=4){imgData.data[i]=8;imgData.data[i+1]=10;imgData.data[i+2]=25;imgData.data[i+3]=255;}
+    const [br,bg,bb]=applyPalette(8,10,25,mode);
+    for(let i=0;i<imgData.data.length;i+=4){imgData.data[i]=br;imgData.data[i+1]=bg;imgData.data[i+2]=bb;imgData.data[i+3]=255;}
     ctx.putImageData(imgData,0,0);
     const cellW=imgData.width/N, cellH=imgData.height/N;
     const rodHalf=Math.min(cellW,cellH)*0.45;
+    const hsl2rgb=(h:number,s:number,l:number):[number,number,number]=>{
+      const q=l<0.5?l*(1+s):l+s-l*s, p2=2*l-q;
+      const hue2=(p3:number,q3:number,t:number)=>{
+        const t2=((t%1)+1)%1;
+        if(t2<1/6)return p3+(q3-p3)*6*t2;
+        if(t2<1/2)return q3;
+        if(t2<2/3)return p3+(q3-p3)*(2/3-t2)*6;
+        return p3;
+      };
+      return [Math.round(hue2(p2,q,h+1/3)*255),Math.round(hue2(p2,q,h)*255),Math.round(hue2(p2,q,h-1/3)*255)];
+    };
     for(let y=0;y<N;y++) for(let x=0;x<N;x++){
       const th=this.theta[y*N+x];
       const right=this.theta[y*N+((x+1)%N)], down=this.theta[((y+1)%N)*N+x];
       const order=(Math.cos(2*(th-right))+Math.cos(2*(th-down))+2)/4;
-      const hue=(th/Math.PI)*360;
-      ctx.fillStyle=`hsl(${hue},70%,${15+order*20}%)`;
+      const hue=(th/Math.PI);
+      const [cr,cg,cb]=hsl2rgb(hue,0.7,(15+order*20)/100);
+      const [r,g,b]=applyPalette(cr,cg,cb,mode);
+      ctx.fillStyle=`rgb(${r},${g},${b})`;
       ctx.fillRect(x*cellW,y*cellH,cellW+1,cellH+1);
     }
     const skip=Math.max(1,Math.floor(N/40));
@@ -604,18 +681,21 @@ export class NematicLC {
       const dx2=Math.cos(th)*rodHalf*skip*0.8, dy2=Math.sin(th)*rodHalf*skip*0.8;
       const right=this.theta[y*N+((x+1)%N)], down=this.theta[((y+1)%N)*N+x];
       const order=((Math.cos(2*(th-right))+Math.cos(2*(th-down)))+2)/4;
-      ctx.strokeStyle=`hsla(${(th/Math.PI)*360},100%,${70+order*25}%,${0.4+order*0.6})`;
+      const [lr,lg,lb]=applyPalette(...hsl2rgb(th/Math.PI,1,(70+order*25)/100),mode);
+      const alpha=(0.4+order*0.6).toFixed(2);
+      ctx.strokeStyle=`rgba(${lr},${lg},${lb},${alpha})`;
       ctx.beginPath();ctx.moveTo(cx2-dx2,cy2-dy2);ctx.lineTo(cx2+dx2,cy2+dy2);ctx.stroke();
     }
     for(let y=1;y<N-1;y+=2) for(let x=1;x<N-1;x+=2){
       const th00=this.theta[y*N+x], th10=this.theta[y*N+x+1];
       const th11=this.theta[(y+1)*N+x+1], th01=this.theta[(y+1)*N+x];
       const diffs=[angDiffNematic(th10,th00),angDiffNematic(th11,th10),angDiffNematic(th01,th11),angDiffNematic(th00,th01)];
-      const winding=diffs.reduce((a,b)=>a+b,0)/Math.PI;
+      const winding=diffs.reduce((a,b2)=>a+b2,0)/Math.PI;
       const w=Math.round(winding*2)/2;
       if(Math.abs(w)>=0.4){
         ctx.beginPath();ctx.arc((x+1)*cellW,(y+1)*cellH,cellW*1.2,0,Math.PI*2);
-        ctx.fillStyle=w>0?'rgba(255,220,80,0.55)':'rgba(100,200,255,0.55)';ctx.fill();
+        const [dr,dg,db]=w>0?applyPalette(255,220,80,mode):applyPalette(100,200,255,mode);
+        ctx.fillStyle=`rgba(${dr},${dg},${db},0.55)`;ctx.fill();
       }
     }
   }
@@ -704,15 +784,13 @@ export class Physarum {
     this.trail.set(diffused);
   }
 
-  draw(ctx: CanvasRenderingContext2D, imgData: ImageData) {
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
     const N=this.N;
     const scaleX=Math.floor(imgData.width/N), scaleY=Math.floor(imgData.height/N);
     for(let y=0;y<N;y++) for(let x=0;x<N;x++){
-      const t=Math.min(1,this.trail[y*N+x]*3); // 3x boost for visibility
+      const t=Math.min(1,this.trail[y*N+x]*3);
       const t2=t*t;
-      const r=Math.floor(t2*255);
-      const g=Math.floor(t*200+t2*55);
-      const b=Math.floor(t*30);
+      const [r,g,b]=applyPalette(Math.floor(t2*255),Math.floor(t*200+t2*55),Math.floor(t*30),mode);
       for(let dy=0;dy<scaleY;dy++) for(let dx=0;dx<scaleX;dx++){
         const px=x*scaleX+dx, py=y*scaleY+dy;
         if(px<imgData.width&&py<imgData.height){
@@ -834,31 +912,44 @@ export class UrbanGrowth {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D) {
+  draw(ctx: CanvasRenderingContext2D, _img?: ImageData, mode: ColorMode = 'color') {
     const N=this.N;
     const cw=this.width/N, ch=this.height/N;
-    // 背景: 暗い緑（未開発）
-    ctx.fillStyle='#0a120a'; ctx.fillRect(0,0,this.width,this.height);
+    const [bgr,bgg,bgb]=applyPalette(10,18,10,mode);
+    ctx.fillStyle=`rgb(${bgr},${bgg},${bgb})`; ctx.fillRect(0,0,this.width,this.height);
+
+    const hsl2rgb=(h:number,s:number,l:number):[number,number,number]=>{
+      const q=l<0.5?l*(1+s):l+s-l*s, p2=2*l-q;
+      const hue2=(p3:number,q3:number,t:number)=>{
+        const t2=((t%1)+1)%1;
+        if(t2<1/6)return p3+(q3-p3)*6*t2;
+        if(t2<1/2)return q3;
+        if(t2<2/3)return p3+(q3-p3)*(2/3-t2)*6;
+        return p3;
+      };
+      return [Math.round(hue2(p2,q,h+1/3)*255),Math.round(hue2(p2,q,h)*255),Math.round(hue2(p2,q,h-1/3)*255)];
+    };
 
     for(let y=0;y<N;y++) for(let x=0;x<N;x++){
       const v=this.land[y*N+x];
       if(v===0){
-        // 密度に応じて薄く色付け
         const d=this.density[y*N+x];
-        if(d>0.05){ctx.fillStyle=`rgba(30,60,20,${d*0.5})`;ctx.fillRect(x*cw,y*ch,cw,ch);}
+        if(d>0.05){
+          const [r,g,b]=applyPalette(30,60,20,mode);
+          ctx.fillStyle=`rgba(${r},${g},${b},${d*0.5})`;ctx.fillRect(x*cw,y*ch,cw,ch);
+        }
       } else if(v===1){
-        // 住宅: 薄いオレンジ〜黄色
         const age=Math.random()*0.3;
-        ctx.fillStyle=`hsl(35,${50+age*30}%,${25+this.density[y*N+x]*25}%)`;
-        ctx.fillRect(x*cw,y*ch,cw,ch);
+        const [r,g,b]=applyPalette(...hsl2rgb(35/360,(50+age*30)/100,(25+this.density[y*N+x]*25)/100),mode);
+        ctx.fillStyle=`rgb(${r},${g},${b})`; ctx.fillRect(x*cw,y*ch,cw,ch);
       } else if(v===2){
-        // 道路: グレー
-        ctx.fillStyle='#2a2a35'; ctx.fillRect(x*cw,y*ch,cw,ch);
-        ctx.fillStyle='rgba(180,170,130,0.3)'; ctx.fillRect(x*cw+cw*0.35,y*ch+ch*0.35,cw*0.3,ch*0.3);
+        const [r,g,b]=applyPalette(42,42,53,mode);
+        ctx.fillStyle=`rgb(${r},${g},${b})`; ctx.fillRect(x*cw,y*ch,cw,ch);
+        const [lr,lg,lb]=applyPalette(180,170,130,mode);
+        ctx.fillStyle=`rgba(${lr},${lg},${lb},0.3)`; ctx.fillRect(x*cw+cw*0.35,y*ch+ch*0.35,cw*0.3,ch*0.3);
       } else if(v===3){
-        // 商業: 青白く輝く
-        ctx.fillStyle=`hsl(210,80%,${20+this.density[y*N+x]*30}%)`;
-        ctx.fillRect(x*cw,y*ch,cw,ch);
+        const [r,g,b]=applyPalette(...hsl2rgb(210/360,0.8,(20+this.density[y*N+x]*30)/100),mode);
+        ctx.fillStyle=`rgb(${r},${g},${b})`; ctx.fillRect(x*cw,y*ch,cw,ch);
       }
     }
   }
@@ -941,7 +1032,7 @@ export class SandDune {
     this.height_field.set(newH);
   }
 
-  draw(ctx: CanvasRenderingContext2D, imgData: ImageData) {
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
     const N=this.N;
     let maxH=0.1;
     for(let i=0;i<this.height_field.length;i++) if(this.height_field[i]>maxH) maxH=this.height_field[i];
@@ -949,8 +1040,7 @@ export class SandDune {
     const scaleX=Math.floor(imgData.width/N), scaleY=Math.floor(imgData.height/N);
     for(let y=0;y<N;y++) for(let x=0;x<N;x++){
       const t=Math.min(1,this.height_field[y*N+x]/maxH);
-      // 砂漠の色: 暗い茶〜明るい砂色
-      const r=Math.floor(20+t*210), g=Math.floor(15+t*160), b=Math.floor(5+t*60);
+      const [r,g,b]=applyPalette(Math.floor(20+t*210),Math.floor(15+t*160),Math.floor(5+t*60),mode);
       for(let dy=0;dy<scaleY;dy++) for(let dx=0;dx<scaleX;dx++){
         const px=x*scaleX+dx, py=y*scaleY+dy;
         if(px<imgData.width&&py<imgData.height){
@@ -1007,14 +1097,15 @@ export class BriansBrain {
     this.grid.set(newGrid);
   }
 
-  draw(ctx: CanvasRenderingContext2D, imgData: ImageData) {
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
     const N=this.N;
     const scaleX=Math.floor(imgData.width/N), scaleY=Math.floor(imgData.height/N);
     for(let y=0;y<N;y++) for(let x=0;x<N;x++){
       const s=this.grid[y*N+x];
-      let r=8,g=10,b=20;
-      if(s===1){r=255;g=240;b=100;}   // 発火: 明るい黄
-      else if(s===2){r=60;g=20;b=120;} // 不応期: 紫
+      let cr=8,cg=10,cb=20;
+      if(s===1){cr=255;cg=240;cb=100;}
+      else if(s===2){cr=60;cg=20;cb=120;}
+      const [r,g,b]=applyPalette(cr,cg,cb,mode);
       for(let dy=0;dy<scaleY;dy++) for(let dx=0;dx<scaleX;dx++){
         const px=x*scaleX+dx, py=y*scaleY+dy;
         if(px<imgData.width&&py<imgData.height){
@@ -1026,3 +1117,924 @@ export class BriansBrain {
     ctx.putImageData(imgData,0,0);
   }
 }
+
+// 16. Conway's Game of Life
+// 誕生: 死んだセルの生きた隣が3 → 生。生存: 生きたセルの生きた隣が2か3 → 生。
+// 単純な局所ルールからグライダー・振動子・静物・ガンなど多様な構造が創発する。
+export class GameOfLife {
+  width: number; height: number;
+  N: number;
+  grid: Uint8Array;
+  next: Uint8Array;
+  age:  Uint16Array;
+
+  constructor(width: number, height: number) {
+    this.width = width; this.height = height;
+    this.N = 200;
+    this.grid = new Uint8Array(this.N * this.N);
+    this.next = new Uint8Array(this.N * this.N);
+    this.age  = new Uint16Array(this.N * this.N);
+    this._seed();
+  }
+
+  _seed() {
+    this.grid.fill(0); this.age.fill(0);
+    for (let i = 0; i < this.grid.length; i++)
+      this.grid[i] = Math.random() < 0.35 ? 1 : 0;
+  }
+
+  reset() { this._seed(); }
+
+  setPattern(name: 'random' | 'glider' | 'rpentomino' | 'acorn' | 'gospergun') {
+    this.grid.fill(0); this.age.fill(0);
+    const N = this.N, cx = N >> 1, cy = N >> 1;
+    const set = (dx: number, dy: number) => {
+      this.grid[((cy+dy+N)%N)*N + ((cx+dx+N)%N)] = 1;
+    };
+    if (name === 'random') { this._seed(); return; }
+    if (name === 'glider') {
+      [[0,-1],[1,0],[-1,1],[0,1],[1,1]].forEach(([dx,dy]) => set(dx,dy));
+    } else if (name === 'rpentomino') {
+      [[0,-1],[1,-1],[-1,0],[0,0],[0,1]].forEach(([dx,dy]) => set(dx,dy));
+    } else if (name === 'acorn') {
+      [[-3,0],[-2,-1],[0,1],[1,0],[2,0],[3,0],[4,0]].forEach(([dx,dy]) => set(dx,dy));
+    } else if (name === 'gospergun') {
+      const cells = [
+        [1,5],[1,6],[2,5],[2,6],
+        [11,5],[11,6],[11,7],[12,4],[12,8],[13,3],[13,9],[14,3],[14,9],
+        [15,6],[16,4],[16,8],[17,5],[17,6],[17,7],[18,6],
+        [21,3],[21,4],[21,5],[22,3],[22,4],[22,5],[23,2],[23,6],[25,1],[25,2],[25,6],[25,7],
+        [35,3],[35,4],[36,3],[36,4],
+      ];
+      const ox = cx - 18, oy = cy - 4;
+      cells.forEach(([dx,dy]) => { this.grid[((oy+dy+N)%N)*N+((ox+dx+N)%N)]=1; });
+    }
+  }
+
+  update(_params: Record<string, never>) {
+    const N = this.N;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            n += this.grid[((y+dy+N)%N)*N + ((x+dx+N)%N)];
+          }
+        const alive = this.grid[y*N+x];
+        this.next[y*N+x] = (!alive && n===3)||(alive&&(n===2||n===3)) ? 1 : 0;
+      }
+    }
+    const tmp = this.grid; this.grid = this.next; this.next = tmp;
+    for (let i = 0; i < N*N; i++)
+      this.age[i] = this.grid[i] ? Math.min(this.age[i]+1, 255) : 0;
+  }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const N = this.N;
+    const sw = imgData.width / N, sh = imgData.height / N;
+    const d = imgData.data;
+    const [br,bg,bb]=applyPalette(8,10,18,mode);
+    for (let i = 0; i < d.length; i += 4) { d[i]=br; d[i+1]=bg; d[i+2]=bb; d[i+3]=255; }
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        if (!this.grid[y*N+x]) continue;
+        const t = this.age[y*N+x] / 255;
+        const [r,g,b]=applyPalette(Math.floor(80+t*160),Math.floor(200+t*55),Math.floor(120+t*110),mode);
+        const px0=Math.floor(x*sw), px1=Math.floor((x+1)*sw);
+        const py0=Math.floor(y*sh), py1=Math.floor((y+1)*sh);
+        for (let py=py0; py<py1; py++)
+          for (let px=px0; px<px1; px++) {
+            const i=(py*imgData.width+px)*4;
+            d[i]=r; d[i+1]=g; d[i+2]=b;
+          }
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+}
+
+// 17. Elementary Cellular Automaton (Wolfram 1次元CA)
+// 3セル近傍(2³=8パターン)からルール番号(0-255)で次状態を決定し、時間を下方向にスクロール表示。
+// Rule 30: カオス的乱数源、Rule 90: シェルピンスキー三角形、Rule 110: チューリング完全
+export class ElementaryCA {
+  width: number; height: number;
+  N: number;
+  rowCount: number;
+  rows: Uint8Array[];
+  currentRule: number;
+
+  constructor(width: number, height: number) {
+    this.width = width; this.height = height;
+    this.N = 300;
+    this.rowCount = 200;
+    this.rows = [];
+    this.currentRule = 30;
+    this._seed(30);
+  }
+
+  _seed(rule: number) {
+    this.currentRule = rule;
+    this.rows = [];
+    const first = new Uint8Array(this.N);
+    first[Math.floor(this.N / 2)] = 1;
+    this.rows.push(first);
+    for (let r = 1; r < this.rowCount; r++) this._step(rule);
+  }
+
+  reset(rule: number) { this._seed(rule); }
+
+  _step(rule: number) {
+    const prev = this.rows[this.rows.length - 1];
+    const next = new Uint8Array(this.N);
+    for (let x = 0; x < this.N; x++) {
+      const l = prev[(x-1+this.N)%this.N], c = prev[x], r = prev[(x+1)%this.N];
+      next[x] = (rule >> ((l<<2)|(c<<1)|r)) & 1;
+    }
+    this.rows.push(next);
+    if (this.rows.length > this.rowCount) this.rows.shift();
+  }
+
+  update(params: { rule: number }) {
+    const rule = Math.round(params.rule);
+    if (rule !== this.currentRule) { this._seed(rule); return; }
+    this._step(rule);
+  }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const W = imgData.width, H = imgData.height, d = imgData.data;
+    const rowH = H / this.rowCount, cellW = W / this.N;
+    const [br,bg,bb]=applyPalette(8,10,18,mode);
+    for (let i = 0; i < d.length; i += 4) { d[i]=br; d[i+1]=bg; d[i+2]=bb; d[i+3]=255; }
+    for (let r = 0; r < this.rows.length; r++) {
+      const row = this.rows[r];
+      const displayR = this.rowCount - this.rows.length + r;
+      const py0=Math.floor(displayR*rowH), py1=Math.floor((displayR+1)*rowH);
+      const bright = Math.floor(60 + (r/this.rows.length)*195);
+      const [pr,pg,pb]=applyPalette(bright,bright,bright,mode);
+      for (let x = 0; x < this.N; x++) {
+        if (!row[x]) continue;
+        const px0=Math.floor(x*cellW), px1=Math.floor((x+1)*cellW);
+        for (let py=py0; py<py1; py++)
+          for (let px=px0; px<px1; px++) {
+            const i=(py*W+px)*4;
+            d[i]=pr; d[i+1]=pg; d[i+2]=pb;
+          }
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+}
+
+// 18. Langton's Ant
+// 白マス: 右折して黒に反転。黒マス: 左折して白に反転。たった2ルールから約10,000ステップ後に
+// 「高速道路」と呼ばれる周期104の規則的な直進パターンが自発的に出現する。
+export class LangtonsAnt {
+  width: number; height: number;
+  N: number;
+  grid: Uint8Array;
+  ants: { x: number; y: number; dir: number }[];
+  stepCount: number;
+
+  constructor(width: number, height: number) {
+    this.width = width; this.height = height;
+    this.N = 200;
+    this.grid = new Uint8Array(this.N * this.N);
+    this.ants = [];
+    this.stepCount = 0;
+    this._seed(1);
+  }
+
+  _seed(antCount: number) {
+    this.grid.fill(0); this.ants = []; this.stepCount = 0;
+    const half = Math.floor(this.N / 2);
+    for (let i = 0; i < antCount; i++) {
+      const off = antCount > 1 ? Math.floor(Math.random()*30 - 15) : 0;
+      this.ants.push({ x: (half+off+this.N)%this.N, y: half, dir: 0 });
+    }
+  }
+
+  reset(antCount: number) { this._seed(antCount); }
+
+  update(params: { speed: number; ants: number }) {
+    const antCount = Math.max(1, Math.round(params.ants));
+    if (this.ants.length !== antCount) this._seed(antCount);
+    const steps = Math.max(1, Math.round(params.speed));
+    const N = this.N;
+    const DX=[0,1,0,-1], DY=[-1,0,1,0];
+    for (let s = 0; s < steps; s++) {
+      for (const ant of this.ants) {
+        const i = ant.y*N + ant.x;
+        if (this.grid[i]===0) { ant.dir=(ant.dir+1)&3; this.grid[i]=1; }
+        else                  { ant.dir=(ant.dir+3)&3; this.grid[i]=0; }
+        ant.x = ((ant.x+DX[ant.dir])+N)%N;
+        ant.y = ((ant.y+DY[ant.dir])+N)%N;
+      }
+      this.stepCount++;
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const N = this.N;
+    const sw = imgData.width/N, sh = imgData.height/N;
+    const d = imgData.data;
+    const [wr,wg,wb]=applyPalette(220,230,245,mode);
+    const [dr,dg,db]=applyPalette(10,12,20,mode);
+    const [ar,ag,ab]=applyPalette(255,60,60,mode);
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const black = this.grid[y*N+x];
+        const px0=Math.floor(x*sw), px1=Math.floor((x+1)*sw);
+        const py0=Math.floor(y*sh), py1=Math.floor((y+1)*sh);
+        const r=black?wr:dr, g=black?wg:dg, b=black?wb:db;
+        for (let py=py0; py<py1; py++)
+          for (let px=px0; px<px1; px++) {
+            const i=(py*imgData.width+px)*4;
+            d[i]=r; d[i+1]=g; d[i+2]=b; d[i+3]=255;
+          }
+      }
+    }
+    for (const ant of this.ants) {
+      const px0=Math.floor(ant.x*sw), px1=Math.floor((ant.x+1)*sw);
+      const py0=Math.floor(ant.y*sh), py1=Math.floor((ant.y+1)*sh);
+      for (let py=py0; py<py1; py++)
+        for (let px=px0; px<px1; px++) {
+          const i=(py*imgData.width+px)*4;
+          d[i]=ar; d[i+1]=ag; d[i+2]=ab; d[i+3]=255;
+        }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+}
+
+// 19. WireWorld — 電子回路セルオートマトン
+// 4状態: 空・銅線・電子頭・電子尾。電子が銅線を伝播し、論理ゲートを構成できる
+export class WireWorld {
+  width: number; height: number;
+  N: number;
+  grid: Uint8Array;   // 0=empty 1=copper 2=head 3=tail
+  next: Uint8Array;
+
+  constructor(width: number, height: number) {
+    this.width = width; this.height = height;
+    this.N = 120;
+    this.grid = new Uint8Array(this.N * this.N);
+    this.next = new Uint8Array(this.N * this.N);
+    this._buildCircuit();
+  }
+
+  _buildCircuit() {
+    const N = this.N, g = this.grid;
+    g.fill(0);
+    const drawH = (y: number, x0: number, x1: number) => {
+      for (let x = x0; x <= x1; x++) g[y*N+x] = 1;
+    };
+    const drawV = (x: number, y0: number, y1: number) => {
+      for (let y = y0; y <= y1; y++) g[y*N+x] = 1;
+    };
+    // loop oscillator 1
+    drawH(10,10,50); drawV(50,10,30); drawH(30,10,50); drawV(10,10,30);
+    g[10*N+11]=2; g[10*N+12]=3;
+    // loop oscillator 2 (larger)
+    drawH(45,20,80); drawV(80,45,75); drawH(75,20,80); drawV(20,45,75);
+    g[45*N+21]=2; g[45*N+22]=3;
+    // signal line with branch
+    drawH(20,60,110); drawV(85,20,50); drawH(50,65,110);
+    g[20*N+61]=2; g[20*N+62]=3;
+    // small loop
+    drawH(88,30,70); drawV(70,88,108); drawH(108,30,70); drawV(30,88,108);
+    g[88*N+31]=2; g[88*N+32]=3;
+  }
+
+  reset() { this._buildCircuit(); }
+
+  update(_params: Record<string, never>) {
+    const N = this.N, g = this.grid, n = this.next;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        const i = y*N+x, s = g[i];
+        if (s === 0) { n[i] = 0; continue; }
+        if (s === 2) { n[i] = 3; continue; }
+        if (s === 3) { n[i] = 1; continue; }
+        let heads = 0;
+        for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
+          if (dx===0&&dy===0) continue;
+          if (g[((y+dy+N)%N)*N+((x+dx+N)%N)]===2) heads++;
+        }
+        n[i] = (heads===1||heads===2) ? 2 : 1;
+      }
+    }
+    const tmp = this.grid; this.grid = this.next; this.next = tmp;
+  }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const N=this.N, sw=imgData.width/N, sh=imgData.height/N, d=imgData.data;
+    const rawColors:[[number,number,number],[number,number,number],[number,number,number],[number,number,number]]=[[6,8,16],[40,30,8],[255,210,40],[255,80,20]];
+    const colors=rawColors.map(([r,g,b])=>applyPalette(r,g,b,mode)) as [[number,number,number],[number,number,number],[number,number,number],[number,number,number]];
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const [r,g,b]=colors[this.grid[y*N+x]];
+      const px0=Math.floor(x*sw),px1=Math.floor((x+1)*sw);
+      const py0=Math.floor(y*sh),py1=Math.floor((y+1)*sh);
+      for (let py=py0;py<py1;py++) for (let px=px0;px<px1;px++) {
+        const i=(py*imgData.width+px)*4; d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255;
+      }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+}
+
+// 20. Boids — Reynolds フロッキング
+// 分離(Separation)・整列(Alignment)・結合(Cohesion)の3ルールで群れ飛行が創発する
+export class Boids {
+  width: number; height: number;
+  agents: { x:number; y:number; vx:number; vy:number }[];
+
+  constructor(width: number, height: number) {
+    this.width = width; this.height = height;
+    this.agents = [];
+    this._seed(200);
+  }
+
+  _seed(n: number) {
+    this.agents = [];
+    for (let i=0;i<n;i++) {
+      const a=Math.random()*Math.PI*2, sp=1+Math.random()*1.5;
+      this.agents.push({ x:Math.random()*this.width, y:Math.random()*this.height,
+        vx:Math.cos(a)*sp, vy:Math.sin(a)*sp });
+    }
+  }
+
+  reset() { this._seed(200); }
+
+  update(params: { separation:number; alignment:number; cohesion:number; radius:number }) {
+    const { separation, alignment, cohesion, radius } = params;
+    const W=this.width, H=this.height, bs=this.agents, n=bs.length;
+    const maxSp=3.5, minSp=0.5;
+    for (let i=0;i<n;i++) {
+      const b=bs[i];
+      let sx=0,sy=0, ax=0,ay=0, cx=0,cy=0, count=0;
+      for (let j=0;j<n;j++) {
+        if (i===j) continue;
+        const o=bs[j];
+        let dx=o.x-b.x, dy=o.y-b.y;
+        if (dx>W/2) dx-=W; if (dx<-W/2) dx+=W;
+        if (dy>H/2) dy-=H; if (dy<-H/2) dy+=H;
+        const d2=dx*dx+dy*dy;
+        if (d2>radius*radius) continue;
+        const d=Math.sqrt(d2)||1;
+        sx-=dx/d; sy-=dy/d;
+        ax+=o.vx; ay+=o.vy;
+        cx+=dx; cy+=dy; count++;
+      }
+      if (count>0) {
+        b.vx+=separation*sx/count + alignment*(ax/count-b.vx)*0.05 + cohesion*cx/count*0.001;
+        b.vy+=separation*sy/count + alignment*(ay/count-b.vy)*0.05 + cohesion*cy/count*0.001;
+      }
+      const sp=Math.sqrt(b.vx*b.vx+b.vy*b.vy)||1;
+      const cl=Math.min(maxSp,Math.max(minSp,sp));
+      b.vx=b.vx/sp*cl; b.vy=b.vy/sp*cl;
+      b.x=(b.x+b.vx+W)%W; b.y=(b.y+b.vy+H)%H;
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, _img?: ImageData, mode: ColorMode = 'color') {
+    const [br,bg,bb]=applyPalette(6,6,10,mode);
+    const [pr,pg,pb]=applyPalette(147,197,253,mode);
+    ctx.fillStyle=`rgb(${br},${bg},${bb})`; ctx.fillRect(0,0,this.width,this.height);
+    for (const b of this.agents) {
+      const a=Math.atan2(b.vy,b.vx);
+      ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(a);
+      ctx.beginPath(); ctx.moveTo(5,0); ctx.lineTo(-3,2.5); ctx.lineTo(-3,-2.5); ctx.closePath();
+      ctx.fillStyle=`rgba(${pr},${pg},${pb},0.85)`; ctx.fill(); ctx.restore();
+    }
+  }
+}
+
+// 21. Belousov-Zhabotinsky (簡易CA)
+// 興奮-不応-静止の連鎖でBZ反応の螺旋ターゲット波を再現する
+export class BelousovZhabotinsky {
+  width: number; height: number;
+  N: number;
+  a: Float32Array; b: Float32Array;
+  na: Float32Array; nb: Float32Array;
+
+  constructor(width: number, height: number) {
+    this.width=width; this.height=height;
+    this.N=200;
+    this.a=new Float32Array(this.N*this.N);
+    this.b=new Float32Array(this.N*this.N);
+    this.na=new Float32Array(this.N*this.N);
+    this.nb=new Float32Array(this.N*this.N);
+    this._seed();
+  }
+
+  _seed() {
+    for (let i=0;i<this.N*this.N;i++) {
+      this.a[i]=Math.random(); this.b[i]=Math.random()*0.3;
+    }
+  }
+
+  reset() { this._seed(); }
+
+  update(params: { k1:number; k2:number; diffA:number }) {
+    const {k1,k2,diffA}=params;
+    const N=this.N;
+    for (let y=1;y<N-1;y++) for (let x=1;x<N-1;x++) {
+      const i=y*N+x, ai=this.a[i], bi=this.b[i];
+      const la=(this.a[i-1]+this.a[i+1]+this.a[i-N]+this.a[i+N])*0.25-ai;
+      const na=Math.max(0,Math.min(1, ai + diffA*la + k1*ai*(1-ai) - ai*bi));
+      const nb=Math.max(0,Math.min(1, bi + 0.02*(ai - k2*bi)));
+      this.na[i]=na; this.nb[i]=nb;
+    }
+    const ta=this.a; this.a=this.na; this.na=ta;
+    const tb=this.b; this.b=this.nb; this.nb=tb;
+  }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const N=this.N, sw=imgData.width/N, sh=imgData.height/N, d=imgData.data;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const a=this.a[y*N+x], b=this.b[y*N+x];
+      const [r,g,bl]=applyPalette(Math.floor(a*255),Math.floor((1-b)*180),Math.floor(b*255),mode);
+      const px0=Math.floor(x*sw),px1=Math.floor((x+1)*sw);
+      const py0=Math.floor(y*sh),py1=Math.floor((y+1)*sh);
+      for (let py=py0;py<py1;py++) for (let px=px0;px<px1;px++) {
+        const i=(py*imgData.width+px)*4; d[i]=r;d[i+1]=g;d[i+2]=bl;d[i+3]=255;
+      }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+}
+
+// 22. Forest Fire CA
+// 木・燃焼・更地の3状態。臨界密度付近でパーコレーション的な相転移が起きる
+export class ForestFire {
+  width: number; height: number;
+  N: number;
+  grid: Uint8Array;   // 0=empty 1=tree 2=burning 3=ash
+  next: Uint8Array;
+
+  constructor(width: number, height: number) {
+    this.width=width; this.height=height;
+    this.N=200;
+    this.grid=new Uint8Array(this.N*this.N);
+    this.next=new Uint8Array(this.N*this.N);
+    this._seed(0.6);
+  }
+
+  _seed(density: number) {
+    for (let i=0;i<this.grid.length;i++) this.grid[i]=Math.random()<density?1:0;
+    for (let x=0;x<this.N;x++) this.grid[x]=Math.random()<density?2:0;
+  }
+
+  reset(density: number) { this._seed(density); }
+
+  update(params: { density:number; regrowth:number; lightning:number }) {
+    const {density,regrowth,lightning}=params;
+    const N=this.N, g=this.grid, n=this.next;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const i=y*N+x, s=g[i];
+      if (s===0) { n[i]=Math.random()<regrowth*0.001?1:0; }
+      else if (s===2) { n[i]=3; }
+      else if (s===3) { n[i]=Math.random()<regrowth*0.005?1:0; }
+      else {
+        let fire=false;
+        for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
+          if (dx===0&&dy===0) continue;
+          if (g[((y+dy+N)%N)*N+((x+dx+N)%N)]===2) { fire=true; break; }
+        }
+        n[i]=(fire||Math.random()<lightning*0.00001)?2:1;
+      }
+    }
+    for (let x=0;x<N;x++) if (n[x]===1&&Math.random()<0.003) n[x]=2;
+    const tmp=this.grid; this.grid=this.next; this.next=tmp;
+    let anyFire=false;
+    for (let i=0;i<this.grid.length;i++) if (this.grid[i]===2){anyFire=true;break;}
+    if (!anyFire) this._seed(density);
+  }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const N=this.N, sw=imgData.width/N, sh=imgData.height/N, d=imgData.data;
+    const rawColors:[[number,number,number],[number,number,number],[number,number,number],[number,number,number]]=[[8,12,8],[20,80,20],[255,120,20],[40,25,10]];
+    const colors=rawColors.map(([r,g,b])=>applyPalette(r,g,b,mode)) as [[number,number,number],[number,number,number],[number,number,number],[number,number,number]];
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const [r,g,b]=colors[this.grid[y*N+x]];
+      const px0=Math.floor(x*sw),px1=Math.floor((x+1)*sw);
+      const py0=Math.floor(y*sh),py1=Math.floor((y+1)*sh);
+      for (let py=py0;py<py1;py++) for (let px=px0;px<px1;px++) {
+        const i=(py*imgData.width+px)*4; d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255;
+      }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+}
+
+// 23. Percolation — 格子浸透
+// 確率pでサイトを開き、上端から下端まで流れが「浸透」するか確かめる。
+// 臨界点 p_c ≈ 0.593 でクラスターが自己相似フラクタルになる。
+export class Percolation {
+  width: number; height: number;
+  N: number;
+  sites: Uint8Array;  // 0=closed 1=open 2=wetted
+  currentP: number;
+
+  constructor(width: number, height: number) {
+    this.width=width; this.height=height;
+    this.N=200;
+    this.sites=new Uint8Array(this.N*this.N);
+    this.currentP=0.59;
+    this._generate(0.59);
+  }
+
+  _generate(p: number) {
+    const N=this.N, s=this.sites;
+    this.currentP=p;
+    for (let i=0;i<s.length;i++) s[i]=Math.random()<p?1:0;
+    const q: number[]=[];
+    for (let x=0;x<N;x++) if (s[x]===1) { s[x]=2; q.push(x); }
+    while (q.length) {
+      const i=q.shift()!;
+      const x=i%N, y=Math.floor(i/N);
+      for (const [dx,dy] of [[0,1],[0,-1],[1,0],[-1,0]] as [number,number][]) {
+        const nx=x+dx, ny=y+dy;
+        if (nx<0||nx>=N||ny<0||ny>=N) continue;
+        const ni=ny*N+nx;
+        if (s[ni]===1) { s[ni]=2; q.push(ni); }
+      }
+    }
+  }
+
+  reset() { this._generate(this.currentP); }
+  update(params: { p:number }) { void params; }
+  regenerate(p: number) { this._generate(p); }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const N=this.N, sw=imgData.width/N, sh=imgData.height/N, d=imgData.data;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const s=this.sites[y*N+x];
+      const [r,g,b]=applyPalette(s===2?40:s===1?200:12, s===2?120:s===1?210:14, s===2?255:s===1?230:20, mode);
+      const px0=Math.floor(x*sw),px1=Math.floor((x+1)*sw);
+      const py0=Math.floor(y*sh),py1=Math.floor((y+1)*sh);
+      for (let py=py0;py<py1;py++) for (let px=px0;px<px1;px++) {
+        const i=(py*imgData.width+px)*4; d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255;
+      }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+}
+
+// 24. Lenia — 連続セルオートマトン
+// 滑らかな近傍カーネルと成長関数で生命様の自律移動パターンを生成する
+export class Lenia {
+  width: number; height: number;
+  N: number;
+  grid: Float32Array;
+  kernel: Float32Array;
+  R: number;
+
+  constructor(width: number, height: number) {
+    this.width=width; this.height=height;
+    this.N=128; this.R=13;
+    this.grid=new Float32Array(this.N*this.N);
+    this.kernel=new Float32Array((2*this.R+1)*(2*this.R+1));
+    this._buildKernel();
+    this._seed();
+  }
+
+  _buildKernel() {
+    const R=this.R, k=this.kernel, size=2*R+1;
+    let sum=0;
+    for (let dy=-R;dy<=R;dy++) for (let dx=-R;dx<=R;dx++) {
+      const r=Math.sqrt(dx*dx+dy*dy)/R;
+      const v=r<=1?Math.exp(4*(1-1/(4*r*(1-r)+1e-9))):0;
+      k[(dy+R)*size+(dx+R)]=v; sum+=v;
+    }
+    for (let i=0;i<k.length;i++) k[i]/=sum;
+  }
+
+  _seed() {
+    const N=this.N; this.grid.fill(0);
+    const cx=N>>1, cy=N>>1, r=20;
+    for (let dy=-r;dy<=r;dy++) for (let dx=-r;dx<=r;dx++) {
+      if (dx*dx+dy*dy>r*r) continue;
+      const dist=Math.sqrt(dx*dx+dy*dy)/r;
+      this.grid[(cy+dy)*N+(cx+dx)]=Math.max(0,1-dist*1.5)*(0.8+Math.random()*0.2);
+    }
+  }
+
+  reset() { this._seed(); }
+
+  update(params: { mu:number; sigma:number; dt:number }) {
+    const {mu,sigma,dt}=params;
+    const N=this.N, R=this.R, g=this.grid, k=this.kernel, kSize=2*R+1;
+    const next=new Float32Array(N*N);
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      let conv=0;
+      for (let dy=-R;dy<=R;dy++) for (let dx=-R;dx<=R;dx++) {
+        conv+=g[((y+dy+N)%N)*N+((x+dx+N)%N)]*k[(dy+R)*kSize+(dx+R)];
+      }
+      const growth=2*Math.exp(-(conv-mu)*(conv-mu)/(2*sigma*sigma))-1;
+      next[y*N+x]=Math.max(0,Math.min(1,g[y*N+x]+dt*growth));
+    }
+    this.grid=next;
+  }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const N=this.N, sw=imgData.width/N, sh=imgData.height/N, d=imgData.data;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const v=this.grid[y*N+x];
+      const [r,g,b]=applyPalette(Math.floor(v*80),Math.floor(v*200),Math.floor(80+v*170),mode);
+      const px0=Math.floor(x*sw),px1=Math.floor((x+1)*sw);
+      const py0=Math.floor(y*sh),py1=Math.floor((y+1)*sh);
+      for (let py=py0;py<py1;py++) for (let px=px0;px<px1;px++) {
+        const i=(py*imgData.width+px)*4; d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255;
+      }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+}
+
+// 25. Schelling Segregation — 社会的分離モデル
+// 「ほんの少し同種の隣人がいれば十分」という閾値が、社会全体の完全分離を引き起こす
+export class SchellingSegregation {
+  width: number; height: number;
+  N: number;
+  grid: Int8Array;   // 0=empty -1=groupA 1=groupB
+  happyRatio: number;
+
+  constructor(width: number, height: number) {
+    this.width=width; this.height=height;
+    this.N=100;
+    this.grid=new Int8Array(this.N*this.N);
+    this.happyRatio=0;
+    this._seed(0.45,0.45);
+  }
+
+  _seed(densA: number, densB: number) {
+    for (let i=0;i<this.grid.length;i++) {
+      const r=Math.random();
+      this.grid[i]=r<densA?-1:r<densA+densB?1:0;
+    }
+  }
+
+  reset() { this._seed(0.45,0.45); }
+
+  update(params: { tolerance:number }) {
+    const {tolerance}=params;
+    const N=this.N, g=this.grid;
+    const unhappy: number[]=[], empty: number[]=[];
+    let happy=0, total=0;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const i=y*N+x, s=g[i];
+      if (s===0) { empty.push(i); continue; }
+      total++;
+      let same=0,diff=0;
+      for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
+        if (dx===0&&dy===0) continue;
+        const ns=g[((y+dy+N)%N)*N+((x+dx+N)%N)];
+        if (ns!==0) { if (ns===s) same++; else diff++; }
+      }
+      const neighbors=same+diff;
+      if (neighbors===0||same/neighbors>=tolerance) happy++;
+      else unhappy.push(i);
+    }
+    this.happyRatio=total>0?happy/total:1;
+    for (let i=unhappy.length-1;i>0;i--) {
+      const j=Math.floor(Math.random()*(i+1));
+      [unhappy[i],unhappy[j]]=[unhappy[j],unhappy[i]];
+    }
+    const moves=Math.min(unhappy.length,empty.length);
+    for (let i=0;i<moves;i++) {
+      const from=unhappy[i], to=empty[Math.floor(Math.random()*empty.length)];
+      g[to]=g[from]; g[from]=0;
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const N=this.N, sw=imgData.width/N, sh=imgData.height/N, d=imgData.data;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const s=this.grid[y*N+x];
+      const [r,g,b]=applyPalette(s===-1?220:s===1?60:14, s===-1?80:s===1?160:16, s===-1?60:s===1?240:22, mode);
+      const px0=Math.floor(x*sw),px1=Math.floor((x+1)*sw);
+      const py0=Math.floor(y*sh),py1=Math.floor((y+1)*sh);
+      for (let py=py0;py<py1;py++) for (let px=px0;px<px1;px++) {
+        const i=(py*imgData.width+px)*4; d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255;
+      }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+}
+
+// 26. Abelian Sandpile — 自己組織化臨界 (SOC)
+// 砂粒を積み上げると臨界状態が自発的に維持され、任意サイズの崩壊が発生する
+export class AbelianSandpile {
+  width: number; height: number;
+  N: number;
+  grid: Int32Array;
+
+  constructor(width: number, height: number) {
+    this.width=width; this.height=height;
+    this.N=150;
+    this.grid=new Int32Array(this.N*this.N);
+    this._seed();
+  }
+
+  _seed() {
+    const N=this.N, cx=N>>1, cy=N>>1;
+    this.grid.fill(0);
+    for (let i=0;i<N*N*2;i++) {
+      const x=cx+Math.floor(Math.random()*10-5);
+      const y=cy+Math.floor(Math.random()*10-5);
+      if (x>=0&&x<N&&y>=0&&y<N) this.grid[y*N+x]++;
+    }
+    this._relax(200000);
+  }
+
+  _relax(maxIter: number) {
+    const N=this.N, g=this.grid;
+    for (let iter=0;iter<maxIter;iter++) {
+      let fired=false;
+      for (let y=1;y<N-1;y++) for (let x=1;x<N-1;x++) {
+        if (g[y*N+x]>=4) {
+          g[y*N+x]-=4; fired=true;
+          g[y*N+x-1]++; g[y*N+x+1]++;
+          g[(y-1)*N+x]++; g[(y+1)*N+x]++;
+        }
+      }
+      if (!fired) break;
+    }
+  }
+
+  reset() { this._seed(); }
+
+  update(params: { rate:number }) {
+    const rate=Math.max(1,Math.round(params.rate));
+    const N=this.N, cx=N>>1, cy=N>>1;
+    for (let i=0;i<rate;i++) {
+      const ox=Math.floor(Math.random()*5-2), oy=Math.floor(Math.random()*5-2);
+      const px=(cx+ox+N)%N, py=(cy+oy+N)%N;
+      this.grid[py*N+px]++;
+    }
+    this._relax(5000);
+  }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const N=this.N, sw=imgData.width/N, sh=imgData.height/N, d=imgData.data;
+    const rawPalette:[[number,number,number],[number,number,number],[number,number,number],[number,number,number],[number,number,number]]=[[8,10,18],[30,100,60],[80,180,100],[200,230,80],[255,255,200]];
+    const palette=rawPalette.map(([r,g,b])=>applyPalette(r,g,b,mode)) as typeof rawPalette;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const v=Math.min(4,Math.max(0,this.grid[y*N+x]));
+      const [r,g,b]=palette[v];
+      const px0=Math.floor(x*sw),px1=Math.floor((x+1)*sw);
+      const py0=Math.floor(y*sh),py1=Math.floor((y+1)*sh);
+      for (let py=py0;py<py1;py++) for (let px=px0;px<px1;px++) {
+        const i=(py*imgData.width+px)*4; d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255;
+      }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+}
+
+// 27. Murmuration — 3D群れ飛行（スターリング）
+// Boidsの3Dバージョン。遠近投影で球状クラウドが回転・変形する集団行動を表現する
+export class Murmuration {
+  width: number; height: number;
+  birds: { x:number; y:number; z:number; vx:number; vy:number; vz:number }[];
+
+  constructor(width: number, height: number) {
+    this.width=width; this.height=height;
+    this.birds=[];
+    this._seed(500);
+  }
+
+  _seed(n: number) {
+    this.birds=[];
+    for (let i=0;i<n;i++) {
+      const a=Math.random()*Math.PI*2, b=Math.random()*Math.PI*2, sp=1+Math.random();
+      this.birds.push({
+        x:(Math.random()-0.5)*300, y:(Math.random()-0.5)*300, z:(Math.random()-0.5)*300,
+        vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, vz:Math.cos(b)*sp
+      });
+    }
+  }
+
+  reset() { this._seed(500); }
+
+  update(params: { sep:number; ali:number; coh:number }) {
+    const {sep,ali,coh}=params;
+    const bs=this.birds, n=bs.length, R=60;
+    const maxSp=2.5, minSp=0.8;
+    for (let i=0;i<n;i++) {
+      const b=bs[i];
+      let sx=0,sy=0,sz=0, ax=0,ay=0,az=0, cx=0,cy=0,cz=0, cnt=0;
+      for (let j=0;j<n;j++) {
+        if (i===j) continue;
+        const o=bs[j];
+        const dx=o.x-b.x, dy=o.y-b.y, dz=o.z-b.z;
+        const d2=dx*dx+dy*dy+dz*dz;
+        if (d2>R*R) continue;
+        const d=Math.sqrt(d2)||1;
+        sx-=dx/d; sy-=dy/d; sz-=dz/d;
+        ax+=o.vx; ay+=o.vy; az+=o.vz;
+        cx+=dx; cy+=dy; cz+=dz; cnt++;
+      }
+      if (cnt>0) {
+        b.vx+=sep*sx/cnt+ali*(ax/cnt-b.vx)*0.05+coh*cx/cnt*0.0008;
+        b.vy+=sep*sy/cnt+ali*(ay/cnt-b.vy)*0.05+coh*cy/cnt*0.0008;
+        b.vz+=sep*sz/cnt+ali*(az/cnt-b.vz)*0.05+coh*cz/cnt*0.0008;
+      }
+      b.vx-=b.x*0.0005; b.vy-=b.y*0.0005; b.vz-=b.z*0.0005;
+      const sp=Math.sqrt(b.vx**2+b.vy**2+b.vz**2)||1;
+      const cl=Math.min(maxSp,Math.max(minSp,sp));
+      b.vx=b.vx/sp*cl; b.vy=b.vy/sp*cl; b.vz=b.vz/sp*cl;
+      b.x+=b.vx; b.y+=b.vy; b.z+=b.vz;
+    }
+  }
+
+  draw(ctx: CanvasRenderingContext2D, _img?: ImageData, mode: ColorMode = 'color') {
+    const W=this.width, H=this.height;
+    const [br,bg,bb]=applyPalette(6,6,10,mode);
+    ctx.fillStyle=`rgba(${br},${bg},${bb},0.25)`; ctx.fillRect(0,0,W,H);
+    const cx=W/2, cy=H/2, fov=400;
+    const [pr,pg,pb]=applyPalette(180,210,255,mode);
+    for (const b of this.birds) {
+      const z=b.z+fov;
+      if (z<=0) continue;
+      const sx=cx+b.x*fov/z, sy=cy+b.y*fov/z;
+      const size=Math.max(0.5,2.5*fov/z);
+      const sp=Math.sqrt(b.vx**2+b.vy**2+b.vz**2);
+      const alpha=Math.min(1,0.4+0.6*sp/2.5);
+      ctx.beginPath(); ctx.arc(sx,sy,size,0,Math.PI*2);
+      ctx.fillStyle=`rgba(${pr},${pg},${pb},${alpha.toFixed(2)})`; ctx.fill();
+    }
+  }
+}
+
+// 28. Hodgepodge Machine — ポッドポッジCA
+// Gerhardt & Schuster の多状態CA。螺旋・ターゲットパターンが自発形成される
+export class HodgepodgeMachine {
+  width: number; height: number;
+  N: number;
+  grid: Uint8Array; next: Uint8Array;
+  states: number;
+
+  constructor(width: number, height: number) {
+    this.width=width; this.height=height;
+    this.N=200; this.states=20;
+    this.grid=new Uint8Array(this.N*this.N);
+    this.next=new Uint8Array(this.N*this.N);
+    this._seed();
+  }
+
+  _seed() {
+    const k=this.states;
+    for (let i=0;i<this.grid.length;i++) this.grid[i]=Math.floor(Math.random()*k);
+  }
+
+  reset() { this._seed(); }
+
+  update(params: { k1:number; k2:number; gParam:number }) {
+    const {k1,k2,gParam}=params;
+    const N=this.N, k=this.states, grid=this.grid, next=this.next;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const i=y*N+x, s=grid[i];
+      if (s===k-1) { next[i]=0; continue; }
+      if (s===0) {
+        let ill=0, sum=0, cnt=0;
+        for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
+          if (dx===0&&dy===0) continue;
+          const ns=grid[((y+dy+N)%N)*N+((x+dx+N)%N)];
+          if (ns>0&&ns<k-1) ill++;
+          sum+=ns; cnt++;
+        }
+        next[i]=ill>0?Math.min(k-1,Math.floor(sum/(cnt||1)/k1+ill/k2)):0;
+      } else {
+        let sum=s, cnt=1;
+        for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++) {
+          if (dx===0&&dy===0) continue;
+          sum+=grid[((y+dy+N)%N)*N+((x+dx+N)%N)]; cnt++;
+        }
+        next[i]=Math.min(k-1,Math.floor(sum/(cnt||1))+gParam);
+      }
+    }
+    const tmp=this.grid; this.grid=this.next; this.next=tmp;
+  }
+
+  draw(ctx: CanvasRenderingContext2D, imgData: ImageData, mode: ColorMode = 'color') {
+    const N=this.N, k=this.states, sw=imgData.width/N, sh=imgData.height/N, d=imgData.data;
+    for (let y=0;y<N;y++) for (let x=0;x<N;x++) {
+      const t=this.grid[y*N+x]/k;
+      const hue=t*360;
+      const cr=Math.floor(128+127*Math.cos(hue*Math.PI/180));
+      const cg=Math.floor(128+127*Math.cos((hue-120)*Math.PI/180));
+      const cb=Math.floor(128+127*Math.cos((hue-240)*Math.PI/180));
+      const [r,g,b]=applyPalette(cr,cg,cb,mode);
+      const px0=Math.floor(x*sw),px1=Math.floor((x+1)*sw);
+      const py0=Math.floor(y*sh),py1=Math.floor((y+1)*sh);
+      for (let py=py0;py<py1;py++) for (let px=px0;px<px1;px++) {
+        const i=(py*imgData.width+px)*4; d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255;
+      }
+    }
+    ctx.putImageData(imgData,0,0);
+  }
+}
+

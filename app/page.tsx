@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, createContext, useContext } from 'react';
 import ExportPanel from './ExportPanel';
 import {
   ChladniPlate,
@@ -18,7 +18,34 @@ import {
   UrbanGrowth,
   SandDune,
   BriansBrain,
+  GameOfLife,
+  ElementaryCA,
+  LangtonsAnt,
+  WireWorld,
+  Boids,
+  BelousovZhabotinsky,
+  ForestFire,
+  Percolation,
+  Lenia,
+  SchellingSegregation,
+  AbelianSandpile,
+  Murmuration,
+  HodgepodgeMachine,
+  type ColorMode,
 } from './SimulationModels';
+
+// ─────────────────────────────────────────────
+// Color mode context
+// ─────────────────────────────────────────────
+const ColorModeContext = createContext<ColorMode>('color');
+const useColorMode = () => useContext(ColorModeContext);
+
+const COLOR_MODE_LABELS: { id: ColorMode; label: string }[] = [
+  { id: 'color',     label: 'Color' },
+  { id: 'grayscale', label: 'Gray' },
+  { id: 'navy',      label: 'Navy' },
+  { id: 'orange',    label: 'Orange' },
+];
 
 // ─────────────────────────────────────────────
 // Model definitions
@@ -151,6 +178,33 @@ const MODELS = [
     accent: '#a78bfa', accentBg: 'rgba(167,139,250,0.08)', previewDim: 400,
   },
   {
+    id: 'gameoflife',
+    name: "Conway's Game of Life",
+    principle: 'セルオートマトン',
+    formula: 'B3/S23\n誕生: 隣接3 → 生　生存: 隣接2or3 → 生',
+    formulaLabel: "Conway's Rules (B3/S23)",
+    desc: '生・死の2状態と最近傍8セルのみで定義される最小限のルールから、グライダー・振動子・静止パターン・グライダーガンといった多様な構造が自発的に創発する。チューリング完全であることも示されている。',
+    accent: '#4ade80', accentBg: 'rgba(74,222,128,0.08)', previewDim: 200,
+  },
+  {
+    id: 'elementaryca',
+    name: 'Elementary CA',
+    principle: 'ウォルフラム1次元CA',
+    formula: '(l, c, r) → rule[(l≪2)|(c≪1)|r]\nRule 30: カオス　Rule 110: チューリング完全',
+    formulaLabel: 'Wolfram Elementary Cellular Automaton',
+    desc: '3セルの近傍パターン8通りを1ビットずつ指定するルール番号(0–255)で次状態が決まる最も単純なCA。Rule 30はランダムに見えるカオスを生成し貝殻模様の起源とも。Rule 110はチューリング完全、Rule 90はシェルピンスキー三角形を作る。',
+    accent: '#94a3b8', accentBg: 'rgba(148,163,184,0.08)', previewDim: 300,
+  },
+  {
+    id: 'langtonsant',
+    name: "Langton's Ant",
+    principle: 'チューリングマシン的CA',
+    formula: '白マス: 右折・黒反転\n黒マス: 左折・白反転',
+    formulaLabel: "Langton's Ant — 2-State 2-Symbol Turmite",
+    desc: 'たった2つのルールで動くアリが約10,000ステップのカオス的な軌跡の後、自発的に周期104の「高速道路」と呼ばれる規則的な直進パターンを形成する。単純さからの複雑性創発の典型例。',
+    accent: '#f97316', accentBg: 'rgba(249,115,22,0.08)', previewDim: 200,
+  },
+  {
     id: 'convection',
     name: 'Rayleigh-Bénard',
     principle: '流体力学的不安定性',
@@ -158,6 +212,96 @@ const MODELS = [
     formulaLabel: 'Rayleigh Number',
     desc: '下から加熱された流体が臨界温度差を超えると、自発的に規則正しい対流セルを形成する。熱エネルギーを空間秩序に変換する。',
     accent: '#f97316', accentBg: 'rgba(249,115,22,0.08)', previewDim: 100,
+  },
+  {
+    id: 'wireworld',
+    name: 'WireWorld',
+    principle: '電子回路CA',
+    formula: '銅線→頭(1or2隣接頭のとき)\n頭→尾　尾→銅線',
+    formulaLabel: 'Fredkin / Berlekamp WireWorld Rules',
+    desc: '空・銅線・電子頭・電子尾の4状態だけで定義されるCA。配線パターンの設計によりANDゲート・ORゲート・時計・コンピュータまで構築できる電子回路シミュレータ。',
+    accent: '#fbbf24', accentBg: 'rgba(251,191,36,0.08)', previewDim: 200,
+  },
+  {
+    id: 'boids',
+    name: 'Boids Flocking',
+    principle: '群れ・集団行動',
+    formula: 'v_i ← v_i + w_s·F_sep + w_a·F_ali + w_c·F_coh',
+    formulaLabel: 'Reynolds Flocking Rules',
+    desc: '分離（衝突回避）・整列（方向揃え）・結合（群れ中心引力）の3ルールだけから、鳥の群れのような流動的な集団行動が創発する。中央制御なしで生まれる秩序の典型例。',
+    accent: '#93c5fd', accentBg: 'rgba(147,197,253,0.08)', previewDim: 300,
+  },
+  {
+    id: 'belousovzhabotinsky',
+    name: 'Belousov-Zhabotinsky',
+    principle: '化学振動・非平衡反応',
+    formula: '∂a/∂t = D∇²a + k₁a(1-a) - ab\n∂b/∂t = 0.02(a - k₂b)',
+    formulaLabel: 'Oregonator-like Reaction-Diffusion',
+    desc: 'マロン酸の臭素酸化という化学反応で観察される非平衡振動。活性化因子と抑制因子の競合から螺旋波・ターゲットパターンが自発形成される。非線形化学の象徴的な実験。',
+    accent: '#f472b6', accentBg: 'rgba(244,114,182,0.08)', previewDim: 200,
+  },
+  {
+    id: 'forestfire',
+    name: 'Forest Fire',
+    principle: '自己組織化臨界・相転移',
+    formula: 'P(fire|neighbor burning) = 1\nP(ignite|lightning) = f\nP(regrow) = p',
+    formulaLabel: 'Drossel-Schwabl Forest Fire Model',
+    desc: '木・燃焼中・更地の3状態CA。木の密度が臨界値 p_c ≈ 0.593 を超えると燃え広がりが浸透（パーコレーション）し、任意規模の山火事が発生するべき乗則分布を示す。',
+    accent: '#fb923c', accentBg: 'rgba(251,146,60,0.08)', previewDim: 200,
+  },
+  {
+    id: 'percolation',
+    name: 'Percolation',
+    principle: '格子浸透・臨界現象',
+    formula: 'P(site open) = p\np_c ≈ 0.593 (square lattice)',
+    formulaLabel: 'Site Percolation on Square Lattice',
+    desc: '確率pで格子点を開き、上端から下端まで流れが連通するか調べる。臨界点 p_c ≈ 0.593 でクラスターが自己相似なフラクタル構造（フラクタル次元 D≈1.896）を示す。',
+    accent: '#38bdf8', accentBg: 'rgba(56,189,248,0.08)', previewDim: 200,
+  },
+  {
+    id: 'lenia',
+    name: 'Lenia',
+    principle: '連続セルオートマトン',
+    formula: 'A^(t+Δt) = clip(A^t + Δt·G(K★A^t))\nG(u) = 2e^{-(u-μ)²/2σ²} - 1',
+    formulaLabel: 'Continuous Cellular Automaton (Chan, 2019)',
+    desc: '離散的なGame of Lifeを実数・連続時間・滑らかなカーネルへ拡張したCA。ベル型の成長関数と環状カーネルの組み合わせから、アメーバ・クラゲ・回転体など"生命様"の自律移動パターンが創発する。',
+    accent: '#34d399', accentBg: 'rgba(52,211,153,0.08)', previewDim: 200,
+  },
+  {
+    id: 'schelling',
+    name: 'Schelling Segregation',
+    principle: '社会的自己組織化',
+    formula: 'happy ⟺ same/(same+diff) ≥ τ\nunhappy → random empty cell',
+    formulaLabel: 'Schelling Tipping Model (1971)',
+    desc: '「周囲の30%以上が同種なら満足」という穏やかな閾値でさえ、長時間後には完全な人種・グループ分離が創発する。個人の弱い選好が社会全体の強い分離を生む、ミクロ-マクロのダイナミクス。',
+    accent: '#c084fc', accentBg: 'rgba(192,132,252,0.08)', previewDim: 200,
+  },
+  {
+    id: 'sandpile',
+    name: 'Abelian Sandpile',
+    principle: '自己組織化臨界 (SOC)',
+    formula: 'z(x,y) ≥ 4 → z±=−4; neighbors±=+1\navalanche size ~ P(s) ∝ s^{-τ}',
+    formulaLabel: 'Bak-Tang-Wiesenfeld Sandpile (1987)',
+    desc: '中心に砂粒を積み上げると4以上で崩壊が起き、連鎖的なアバランシェが発生する。臨界状態が外部調整なしに自発的に維持され（SOC）、崩壊サイズがべき乗則に従う。1/fノイズの起源仮説。',
+    accent: '#a3e635', accentBg: 'rgba(163,230,53,0.08)', previewDim: 200,
+  },
+  {
+    id: 'murmuration',
+    name: 'Murmuration',
+    principle: '3D群れ飛行・集団整列',
+    formula: 'Boids in ℝ³ + perspective projection\n強磁場的集団整列の3次元版',
+    formulaLabel: '3D Reynolds Boids with Perspective',
+    desc: 'スターリング（ムクドリ）の群れ飛行を3Dで再現。遠近投影で球状クラウドの膨張・収縮・波動が見える。数百羽の局所的な相互作用から、まるで一つの生物のような流動的な形状変化が創発する。',
+    accent: '#bfdbfe', accentBg: 'rgba(191,219,254,0.08)', previewDim: 300,
+  },
+  {
+    id: 'hodgepodge',
+    name: 'Hodgepodge Machine',
+    principle: '化学振動CA・BZ類似',
+    formula: 'ill→sick: a_new = [Σill/k₁ + Σsick/k₂]\nsick→healthy: → 0  healthy: +g',
+    formulaLabel: 'Gerhardt-Schuster-Madore Rules (1990)',
+    desc: 'Gerhardt らが提案した多状態CA。病気・回復・健康の状態遷移ルールにより、Belousov-Zhabotinsky反応と視覚的に酷似した螺旋波・ターゲットパターンが自発的に出現する。',
+    accent: '#e879f9', accentBg: 'rgba(232,121,249,0.08)', previewDim: 200,
   },
 ];
 
@@ -167,6 +311,19 @@ type ModelId = typeof MODELS[number]['id'];
 // Default parameters
 // ─────────────────────────────────────────────
 const DEFAULT_PARAMS = {
+  gameoflife:   {} as Record<string, never>,
+  elementaryca: { rule: 30 },
+  langtonsant:  { speed: 50, ants: 1 },
+  wireworld:    {} as Record<string, never>,
+  boids:        { separation: 0.05, alignment: 1.0, cohesion: 1.0, radius: 40 },
+  belousovzhabotinsky: { k1: 2.0, k2: 3.0, diffA: 0.12 },
+  forestfire:   { density: 0.6, regrowth: 1.0, lightning: 5.0 },
+  percolation:  { p: 0.59 },
+  lenia:        { mu: 0.15, sigma: 0.017, dt: 0.1 },
+  schelling:    { tolerance: 0.35 },
+  sandpile:     { rate: 5 },
+  murmuration:  { sep: 0.05, ali: 1.0, coh: 1.0 },
+  hodgepodge:   { k1: 2.0, k2: 3.0, gParam: 1 },
   chladni:     { n: 3, m: 2, intensity: 25 },
   convection:  { rayleigh: 0.6, cooling: 0.6 },
   turing:      { f: 0.055, k: 0.062, Du: 0.2097, Dv: 0.105 },
@@ -194,6 +351,7 @@ function GalleryCard({ model, onClick, index }: {
   const modelRef  = useRef<unknown>(null);
   const imgRef    = useRef<ImageData | null>(null);
   const rafRef    = useRef<number>(0);
+  const colorMode = useColorMode();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -217,10 +375,23 @@ function GalleryCard({ model, onClick, index }: {
       case 'physarum':    modelRef.current = new Physarum(dim, dim); break;
       case 'urban':       modelRef.current = new UrbanGrowth(dim, dim); break;
       case 'sanddune':    modelRef.current = new SandDune(dim, dim); break;
-      case 'brainsbrain': modelRef.current = new BriansBrain(dim, dim); break;
+      case 'brainsbrain':  modelRef.current = new BriansBrain(dim, dim); break;
+      case 'gameoflife':   modelRef.current = new GameOfLife(dim, dim); break;
+      case 'elementaryca': modelRef.current = new ElementaryCA(dim, dim); break;
+      case 'langtonsant':  modelRef.current = new LangtonsAnt(dim, dim); break;
+      case 'wireworld':    modelRef.current = new WireWorld(dim, dim); break;
+      case 'boids':        modelRef.current = new Boids(dim, dim); break;
+      case 'belousovzhabotinsky': modelRef.current = new BelousovZhabotinsky(dim, dim); break;
+      case 'forestfire':   modelRef.current = new ForestFire(dim, dim); break;
+      case 'percolation':  modelRef.current = new Percolation(dim, dim); break;
+      case 'lenia':        modelRef.current = new Lenia(dim, dim); break;
+      case 'schelling':    modelRef.current = new SchellingSegregation(dim, dim); break;
+      case 'sandpile':     modelRef.current = new AbelianSandpile(dim, dim); break;
+      case 'murmuration':  modelRef.current = new Murmuration(dim, dim); break;
+      case 'hodgepodge':   modelRef.current = new HodgepodgeMachine(dim, dim); break;
     }
 
-    const needsImgData = ['turing','ising','convection','nematic','cahnhilliard','excitable','physarum','sanddune','brainsbrain'];
+    const needsImgData = ['turing','ising','convection','nematic','cahnhilliard','excitable','physarum','sanddune','brainsbrain','gameoflife','elementaryca','langtonsant','wireworld','belousovzhabotinsky','forestfire','percolation','lenia','schelling','sandpile','hodgepodge'];
     if (needsImgData.includes(model.id)) imgRef.current = ctx.createImageData(dim, dim);
 
     const p = DEFAULT_PARAMS[model.id as keyof typeof DEFAULT_PARAMS] as never;
@@ -229,56 +400,95 @@ function GalleryCard({ model, onClick, index }: {
       switch (model.id) {
         case 'chladni':
           (modelRef.current as ChladniPlate).update(p);
-          (modelRef.current as ChladniPlate).draw(ctx); break;
+          (modelRef.current as ChladniPlate).draw(ctx, undefined, colorMode); break;
         case 'convection':
           (modelRef.current as ConvectionCell).update(p);
-          if (imgRef.current)(modelRef.current as ConvectionCell).draw(ctx, imgRef.current); break;
+          if (imgRef.current)(modelRef.current as ConvectionCell).draw(ctx, imgRef.current, colorMode); break;
         case 'turing':
           for (let i = 0; i < 20; i++)(modelRef.current as ReactionDiffusion).update(p);
-          if (imgRef.current)(modelRef.current as ReactionDiffusion).draw(ctx, imgRef.current); break;
+          if (imgRef.current)(modelRef.current as ReactionDiffusion).draw(ctx, imgRef.current, colorMode); break;
         case 'buckling':
           (modelRef.current as BucklingChain).update(p);
-          (modelRef.current as BucklingChain).draw(ctx); break;
+          (modelRef.current as BucklingChain).draw(ctx, undefined, colorMode); break;
         case 'voronoi':
           (modelRef.current as VoronoiRelaxation).update(p);
-          (modelRef.current as VoronoiRelaxation).draw(ctx); break;
+          (modelRef.current as VoronoiRelaxation).draw(ctx, undefined, colorMode); break;
         case 'ising':
           (modelRef.current as IsingModel).update(p, 15000);
-          if (imgRef.current)(modelRef.current as IsingModel).draw(ctx, imgRef.current); break;
+          if (imgRef.current)(modelRef.current as IsingModel).draw(ctx, imgRef.current, colorMode); break;
         case 'vicsek':
           (modelRef.current as VicsekModel).update(p);
-          (modelRef.current as VicsekModel).draw(ctx); break;
+          (modelRef.current as VicsekModel).draw(ctx, undefined, colorMode); break;
         case 'nematic':
           for (let i = 0; i < 3; i++)(modelRef.current as NematicLC).update(p);
-          if (imgRef.current)(modelRef.current as NematicLC).draw(ctx, imgRef.current); break;
+          if (imgRef.current)(modelRef.current as NematicLC).draw(ctx, imgRef.current, colorMode); break;
         case 'crystal':
           for (let i = 0; i < 5; i++)(modelRef.current as CrystalGrowth).update(p);
-          (modelRef.current as CrystalGrowth).draw(ctx); break;
+          (modelRef.current as CrystalGrowth).draw(ctx, undefined, colorMode); break;
         case 'cahnhilliard':
           for (let i = 0; i < 8; i++)(modelRef.current as CahnHilliard).update(p);
-          if (imgRef.current)(modelRef.current as CahnHilliard).draw(ctx, imgRef.current); break;
+          if (imgRef.current)(modelRef.current as CahnHilliard).draw(ctx, imgRef.current, colorMode); break;
         case 'excitable':
           (modelRef.current as ExcitableMedia).update(p);
-          if (imgRef.current)(modelRef.current as ExcitableMedia).draw(ctx, imgRef.current); break;
+          if (imgRef.current)(modelRef.current as ExcitableMedia).draw(ctx, imgRef.current, colorMode); break;
         case 'physarum':
           for (let i = 0; i < 3; i++)(modelRef.current as Physarum).update(p);
-          if (imgRef.current)(modelRef.current as Physarum).draw(ctx, imgRef.current); break;
+          if (imgRef.current)(modelRef.current as Physarum).draw(ctx, imgRef.current, colorMode); break;
         case 'urban':
           (modelRef.current as UrbanGrowth).update(p);
-          (modelRef.current as UrbanGrowth).draw(ctx); break;
+          (modelRef.current as UrbanGrowth).draw(ctx, undefined, colorMode); break;
         case 'sanddune':
           for (let i = 0; i < 3; i++)(modelRef.current as SandDune).update(p);
-          if (imgRef.current)(modelRef.current as SandDune).draw(ctx, imgRef.current); break;
+          if (imgRef.current)(modelRef.current as SandDune).draw(ctx, imgRef.current, colorMode); break;
         case 'brainsbrain':
           (modelRef.current as BriansBrain).update(p);
-          if (imgRef.current)(modelRef.current as BriansBrain).draw(ctx, imgRef.current); break;
+          if (imgRef.current)(modelRef.current as BriansBrain).draw(ctx, imgRef.current, colorMode); break;
+        case 'gameoflife':
+          (modelRef.current as GameOfLife).update(p);
+          if (imgRef.current)(modelRef.current as GameOfLife).draw(ctx, imgRef.current, colorMode); break;
+        case 'elementaryca':
+          (modelRef.current as ElementaryCA).update(p);
+          if (imgRef.current)(modelRef.current as ElementaryCA).draw(ctx, imgRef.current, colorMode); break;
+        case 'langtonsant':
+          (modelRef.current as LangtonsAnt).update(p);
+          if (imgRef.current)(modelRef.current as LangtonsAnt).draw(ctx, imgRef.current, colorMode); break;
+        case 'wireworld':
+          (modelRef.current as WireWorld).update(p);
+          if (imgRef.current)(modelRef.current as WireWorld).draw(ctx, imgRef.current, colorMode); break;
+        case 'boids':
+          (modelRef.current as Boids).update(p);
+          (modelRef.current as Boids).draw(ctx, undefined, colorMode); break;
+        case 'belousovzhabotinsky':
+          for (let i=0;i<3;i++)(modelRef.current as BelousovZhabotinsky).update(p);
+          if (imgRef.current)(modelRef.current as BelousovZhabotinsky).draw(ctx, imgRef.current, colorMode); break;
+        case 'forestfire':
+          (modelRef.current as ForestFire).update(p);
+          if (imgRef.current)(modelRef.current as ForestFire).draw(ctx, imgRef.current, colorMode); break;
+        case 'percolation':
+          (modelRef.current as Percolation).update(p);
+          if (imgRef.current)(modelRef.current as Percolation).draw(ctx, imgRef.current, colorMode); break;
+        case 'lenia':
+          (modelRef.current as Lenia).update(p);
+          if (imgRef.current)(modelRef.current as Lenia).draw(ctx, imgRef.current, colorMode); break;
+        case 'schelling':
+          (modelRef.current as SchellingSegregation).update(p);
+          if (imgRef.current)(modelRef.current as SchellingSegregation).draw(ctx, imgRef.current, colorMode); break;
+        case 'sandpile':
+          (modelRef.current as AbelianSandpile).update(p);
+          if (imgRef.current)(modelRef.current as AbelianSandpile).draw(ctx, imgRef.current, colorMode); break;
+        case 'murmuration':
+          (modelRef.current as Murmuration).update(p);
+          (modelRef.current as Murmuration).draw(ctx, undefined, colorMode); break;
+        case 'hodgepodge':
+          (modelRef.current as HodgepodgeMachine).update(p);
+          if (imgRef.current)(modelRef.current as HodgepodgeMachine).draw(ctx, imgRef.current, colorMode); break;
       }
       rafRef.current = requestAnimationFrame(loop);
     };
 
     const delay = setTimeout(() => { rafRef.current = requestAnimationFrame(loop); }, index * 100);
     return () => { clearTimeout(delay); cancelAnimationFrame(rafRef.current); };
-  }, [model.id, model.previewDim, index]);
+  }, [model.id, model.previewDim, index, colorMode]);
 
   return (
     <div
@@ -310,7 +520,10 @@ function GalleryCard({ model, onClick, index }: {
 // ─────────────────────────────────────────────
 // Simulation View
 // ─────────────────────────────────────────────
-function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => void }) {
+function SimulationView({ modelId, onBack, colorMode, setColorMode }: {
+  modelId: ModelId; onBack: () => void;
+  colorMode: ColorMode; setColorMode: (m: ColorMode) => void;
+}) {
   const model = MODELS.find((m) => m.id === modelId)!;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [running, setRunning] = useState(true);
@@ -335,7 +548,20 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
   const urbanRef    = useRef<UrbanGrowth | null>(null);
   const duneRef     = useRef<SandDune | null>(null);
   const brainRef    = useRef<BriansBrain | null>(null);
-  const imgDataRef  = useRef<ImageData | null>(null);
+  const golRef         = useRef<GameOfLife | null>(null);
+  const ecaRef         = useRef<ElementaryCA | null>(null);
+  const antRef         = useRef<LangtonsAnt | null>(null);
+  const wireworldRef   = useRef<WireWorld | null>(null);
+  const boidsRef       = useRef<Boids | null>(null);
+  const bzRef          = useRef<BelousovZhabotinsky | null>(null);
+  const forestRef      = useRef<ForestFire | null>(null);
+  const percolRef      = useRef<Percolation | null>(null);
+  const leniaRef       = useRef<Lenia | null>(null);
+  const schellingRef   = useRef<SchellingSegregation | null>(null);
+  const sandpileRef    = useRef<AbelianSandpile | null>(null);
+  const murmuRef       = useRef<Murmuration | null>(null);
+  const hodgepodgeRef  = useRef<HodgepodgeMachine | null>(null);
+  const imgDataRef     = useRef<ImageData | null>(null);
 
   // Parameter states
   const [cp,   setCp]   = useState(DEFAULT_PARAMS.chladni);
@@ -353,6 +579,17 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
   const [urb,  setUrb]  = useState(DEFAULT_PARAMS.urban);
   const [dune, setDune] = useState(DEFAULT_PARAMS.sanddune);
   const [brain,setBrain]= useState(DEFAULT_PARAMS.brainsbrain);
+  const [eca,  setEca]  = useState(DEFAULT_PARAMS.elementaryca);
+  const [ant,  setAnt]  = useState(DEFAULT_PARAMS.langtonsant);
+  const [boids,  setBoids]   = useState(DEFAULT_PARAMS.boids);
+  const [bz,     setBz]      = useState(DEFAULT_PARAMS.belousovzhabotinsky);
+  const [forest, setForest]  = useState(DEFAULT_PARAMS.forestfire);
+  const [percol, setPercol]  = useState(DEFAULT_PARAMS.percolation);
+  const [lenia,  setLenia]   = useState(DEFAULT_PARAMS.lenia);
+  const [schell, setSchell]  = useState(DEFAULT_PARAMS.schelling);
+  const [pile,   setPile]    = useState(DEFAULT_PARAMS.sandpile);
+  const [murmu,  setMurmu]   = useState(DEFAULT_PARAMS.murmuration);
+  const [hodge,  setHodge]   = useState(DEFAULT_PARAMS.hodgepodge);
 
   // Canvas dimensions per model
   const getDim = useCallback(() => {
@@ -368,6 +605,19 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
       case 'urban':       return { w: 300, h: 300 };
       case 'sanddune':    return { w: 300, h: 300 };
       case 'brainsbrain': return { w: 300, h: 300 };
+      case 'gameoflife':  return { w: 300, h: 300 };
+      case 'elementaryca':return { w: 300, h: 300 };
+      case 'langtonsant': return { w: 300, h: 300 };
+      case 'wireworld':   return { w: 300, h: 300 };
+      case 'boids':       return { w: 400, h: 400 };
+      case 'belousovzhabotinsky': return { w: 300, h: 300 };
+      case 'forestfire':  return { w: 300, h: 300 };
+      case 'percolation': return { w: 300, h: 300 };
+      case 'lenia':       return { w: 256, h: 256 };
+      case 'schelling':   return { w: 300, h: 300 };
+      case 'sandpile':    return { w: 300, h: 300 };
+      case 'murmuration': return { w: 400, h: 400 };
+      case 'hodgepodge':  return { w: 300, h: 300 };
       default:            return { w: 400, h: 400 };
     }
   }, [modelId]);
@@ -389,8 +639,21 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
       case 'urban':       urbanRef.current?.reset(); break;
       case 'sanddune':    duneRef.current?.reset(); break;
       case 'brainsbrain': brainRef.current?.reset(); break;
+      case 'gameoflife':  golRef.current?.reset(); break;
+      case 'elementaryca':ecaRef.current?.reset(eca.rule); break;
+      case 'langtonsant': antRef.current?.reset(ant.ants); break;
+      case 'wireworld':   wireworldRef.current  = new WireWorld(300, 300); break;
+      case 'boids':       boidsRef.current      = new Boids(400, 400); break;
+      case 'belousovzhabotinsky': bzRef.current = new BelousovZhabotinsky(300, 300); break;
+      case 'forestfire':  forestRef.current     = new ForestFire(300, 300); break;
+      case 'percolation': percolRef.current?.regenerate(percol.p); break;
+      case 'lenia':       leniaRef.current      = new Lenia(256, 256); break;
+      case 'schelling':   schellingRef.current  = new SchellingSegregation(300, 300); break;
+      case 'sandpile':    sandpileRef.current   = new AbelianSandpile(300, 300); break;
+      case 'murmuration': murmuRef.current      = new Murmuration(400, 400); break;
+      case 'hodgepodge':  hodgepodgeRef.current = new HodgepodgeMachine(300, 300); break;
     }
-  }, [modelId]);
+  }, [modelId, eca.rule, ant.ants, percol.p]);
 
   const initModels = useCallback(() => {
     chladniRef.current  = new ChladniPlate(400, 400, 3000);
@@ -408,6 +671,19 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
     urbanRef.current    = new UrbanGrowth(300, 300);
     duneRef.current     = new SandDune(300, 300);
     brainRef.current    = new BriansBrain(300, 300);
+    golRef.current       = new GameOfLife(300, 300);
+    ecaRef.current       = new ElementaryCA(300, 300);
+    antRef.current       = new LangtonsAnt(300, 300);
+    wireworldRef.current  = new WireWorld(300, 300);
+    boidsRef.current      = new Boids(400, 400);
+    bzRef.current         = new BelousovZhabotinsky(300, 300);
+    forestRef.current     = new ForestFire(300, 300);
+    percolRef.current     = new Percolation(300, 300);
+    leniaRef.current      = new Lenia(256, 256);
+    schellingRef.current  = new SchellingSegregation(300, 300);
+    sandpileRef.current   = new AbelianSandpile(300, 300);
+    murmuRef.current      = new Murmuration(400, 400);
+    hodgepodgeRef.current = new HodgepodgeMachine(300, 300);
 
     const canvas = canvasRef.current;
     if (canvas) {
@@ -449,48 +725,75 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
       if (running) {
         switch (modelId) {
           case 'chladni':
-            chladniRef.current?.update(cp); chladniRef.current?.draw(ctx); break;
+            chladniRef.current?.update(cp); chladniRef.current?.draw(ctx, undefined, colorMode); break;
           case 'convection':
-            convRef.current?.update(conv); convRef.current?.draw(ctx, img); break;
+            convRef.current?.update(conv); convRef.current?.draw(ctx, img, colorMode); break;
           case 'turing':
             for (let i = 0; i < 15; i++) rdRef.current?.update(rd);
-            rdRef.current?.draw(ctx, img); break;
+            rdRef.current?.draw(ctx, img, colorMode); break;
           case 'buckling':
-            buckRef.current?.update(buck); buckRef.current?.draw(ctx); break;
+            buckRef.current?.update(buck); buckRef.current?.draw(ctx, undefined, colorMode); break;
           case 'voronoi':
-            voronoiRef.current?.update(vor); voronoiRef.current?.draw(ctx); break;
+            voronoiRef.current?.update(vor); voronoiRef.current?.draw(ctx, undefined, colorMode); break;
           case 'ising':
-            isingRef.current?.update(ising, 40000); isingRef.current?.draw(ctx, img); break;
+            isingRef.current?.update(ising, 40000); isingRef.current?.draw(ctx, img, colorMode); break;
           case 'vicsek':
-            vicsekRef.current?.update(vic); vicsekRef.current?.draw(ctx); break;
+            vicsekRef.current?.update(vic); vicsekRef.current?.draw(ctx, undefined, colorMode); break;
           case 'nematic':
             for (let i = 0; i < 5; i++) nematicRef.current?.update(nem);
-            nematicRef.current?.draw(ctx, img); break;
+            nematicRef.current?.draw(ctx, img, colorMode); break;
           case 'crystal':
             for (let i = 0; i < 8; i++) crystalRef.current?.update(crys);
-            crystalRef.current?.draw(ctx); break;
+            crystalRef.current?.draw(ctx, undefined, colorMode); break;
           case 'cahnhilliard':
             for (let i = 0; i < 10; i++) cahnRef.current?.update(cahn);
-            cahnRef.current?.draw(ctx, img); break;
+            cahnRef.current?.draw(ctx, img, colorMode); break;
           case 'excitable':
-            excitRef.current?.update(excit); excitRef.current?.draw(ctx, img); break;
+            excitRef.current?.update(excit); excitRef.current?.draw(ctx, img, colorMode); break;
           case 'physarum':
             for (let i = 0; i < 4; i++) physarumRef.current?.update(phy);
-            physarumRef.current?.draw(ctx, img); break;
+            physarumRef.current?.draw(ctx, img, colorMode); break;
           case 'urban':
-            urbanRef.current?.update(urb); urbanRef.current?.draw(ctx); break;
+            urbanRef.current?.update(urb); urbanRef.current?.draw(ctx, undefined, colorMode); break;
           case 'sanddune':
             for (let i = 0; i < 3; i++) duneRef.current?.update(dune);
-            duneRef.current?.draw(ctx, img); break;
+            duneRef.current?.draw(ctx, img, colorMode); break;
           case 'brainsbrain':
-            brainRef.current?.update(brain); brainRef.current?.draw(ctx, img); break;
+            brainRef.current?.update(brain); brainRef.current?.draw(ctx, img, colorMode); break;
+          case 'gameoflife':
+            golRef.current?.update({}); golRef.current?.draw(ctx, img, colorMode); break;
+          case 'elementaryca':
+            ecaRef.current?.update(eca); ecaRef.current?.draw(ctx, img, colorMode); break;
+          case 'langtonsant':
+            antRef.current?.update(ant); antRef.current?.draw(ctx, img, colorMode); break;
+          case 'wireworld':
+            wireworldRef.current?.update({}); wireworldRef.current?.draw(ctx, img, colorMode); break;
+          case 'boids':
+            boidsRef.current?.update(boids); boidsRef.current?.draw(ctx, undefined, colorMode); break;
+          case 'belousovzhabotinsky':
+            for (let i=0;i<3;i++) bzRef.current?.update(bz);
+            bzRef.current?.draw(ctx, img, colorMode); break;
+          case 'forestfire':
+            forestRef.current?.update(forest); forestRef.current?.draw(ctx, img, colorMode); break;
+          case 'percolation':
+            percolRef.current?.update(percol); percolRef.current?.draw(ctx, img, colorMode); break;
+          case 'lenia':
+            leniaRef.current?.update(lenia); leniaRef.current?.draw(ctx, img, colorMode); break;
+          case 'schelling':
+            schellingRef.current?.update(schell); schellingRef.current?.draw(ctx, img, colorMode); break;
+          case 'sandpile':
+            sandpileRef.current?.update(pile); sandpileRef.current?.draw(ctx, img, colorMode); break;
+          case 'murmuration':
+            murmuRef.current?.update(murmu); murmuRef.current?.draw(ctx, undefined, colorMode); break;
+          case 'hodgepodge':
+            hodgepodgeRef.current?.update(hodge); hodgepodgeRef.current?.draw(ctx, img, colorMode); break;
         }
       }
       rafId = requestAnimationFrame(loop);
     };
     rafId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId);
-  }, [modelId, running, cp, conv, rd, buck, vor, ising, vic, nem, crys, cahn, excit, phy, urb, dune, brain, getDim]);
+  }, [modelId, running, cp, conv, rd, buck, vor, ising, vic, nem, crys, cahn, excit, phy, urb, dune, brain, eca, ant, boids, bz, forest, percol, lenia, schell, pile, murmu, hodge, getDim, colorMode]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -526,6 +829,7 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
         </div>
 
         <div className="sim-header-actions">
+          <ColorModeSwitcher colorMode={colorMode} setColorMode={setColorMode} />
           {running && <div className="live-dot" />}
           <button onClick={resetCurrent} className="btn-pill"
             style={{ background:'rgba(255,255,255,0.04)',color:'#94a3b8',borderColor:'rgba(255,255,255,0.12)' }}>
@@ -760,6 +1064,162 @@ function SimulationView({ modelId, onBack }: { modelId: ModelId; onBack: () => v
                 <ResetBtn onClick={()=>{nematicRef.current=new NematicLC(300);}} label="Reset Directors" />
               </div>
             )}
+
+            {modelId==='gameoflife' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:16 }}>
+                <div style={{ fontSize:10,fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',color:'#475569',marginBottom:4 }}>Patterns</div>
+                {(['random','glider','rpentomino','acorn','gospergun'] as const).map((name) => (
+                  <button key={name} onClick={()=>golRef.current?.setPattern(name)}
+                    style={{ padding:'8px 12px',borderRadius:7,border:'1px solid rgba(255,255,255,0.07)',background:'rgba(255,255,255,0.03)',color:'#94a3b8',fontSize:12,cursor:'pointer',textAlign:'left',transition:'all 0.15s ease' }}
+                    onMouseEnter={(e)=>{(e.currentTarget as HTMLButtonElement).style.background='rgba(74,222,128,0.08)';(e.currentTarget as HTMLButtonElement).style.color=model.accent;}}
+                    onMouseLeave={(e)=>{(e.currentTarget as HTMLButtonElement).style.background='rgba(255,255,255,0.03)';(e.currentTarget as HTMLButtonElement).style.color='#94a3b8';}}
+                  >{{random:'Random',glider:'Glider',rpentomino:'R-Pentomino',acorn:'Acorn',gospergun:'Gosper Gun'}[name]}</button>
+                ))}
+                <ResetBtn onClick={()=>golRef.current?.reset()} label="Random Reseed" />
+              </div>
+            )}
+
+            {modelId==='elementaryca' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="Rule Number" value={eca.rule} display={`Rule ${eca.rule}`} min={0} max={255} step={1} accent={model.accent} onChange={(v)=>setEca({...eca,rule:v})} />
+                <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+                  {([30,90,110,184,54,18,22,45] as const).map((r)=>(
+                    <button key={r} onClick={()=>setEca({rule:r})}
+                      style={{ padding:'4px 10px',borderRadius:6,border:`1px solid ${eca.rule===r?model.accent:'rgba(255,255,255,0.1)'}`,background:eca.rule===r?`${model.accent}18`:'transparent',color:eca.rule===r?model.accent:'#64748b',fontSize:11,fontWeight:600,cursor:'pointer' }}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ padding:'10px 14px',borderRadius:8,background:'rgba(148,163,184,0.06)',border:'1px solid rgba(148,163,184,0.15)',fontSize:11,color:'#94a3b8',lineHeight:1.8 }}>
+                  30: カオス・貝殻模様<br/>
+                  90: シェルピンスキー三角形<br/>
+                  110: チューリング完全
+                </div>
+                <ResetBtn onClick={()=>ecaRef.current?.reset(eca.rule)} label="Reset" />
+              </div>
+            )}
+
+            {modelId==='langtonsant' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="Speed (steps/frame)" value={ant.speed} display={`${ant.speed}`} min={1} max={500} step={1} accent={model.accent} onChange={(v)=>setAnt({...ant,speed:v})} />
+                <SliderField label="Number of Ants" value={ant.ants} display={`${ant.ants}`} min={1} max={8} step={1} accent={model.accent} onChange={(v)=>setAnt({...ant,ants:v})} />
+                <div style={{ padding:'10px 14px',borderRadius:8,background:'rgba(249,115,22,0.05)',border:'1px solid rgba(249,115,22,0.15)',fontSize:11,color:'#fdba74',lineHeight:1.8 }}>
+                  <span style={{ color:'#f87171' }}>●</span> アリの現在位置<br/>
+                  白: 未訪問　黒: 訪問済<br/>
+                  〜10,000ステップで高速道路出現
+                </div>
+                <ResetBtn onClick={()=>antRef.current?.reset(ant.ants)} label="Reset" />
+              </div>
+            )}
+
+            {modelId==='wireworld' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <div style={{ padding:'10px 14px',borderRadius:8,background:'rgba(251,191,36,0.05)',border:'1px solid rgba(251,191,36,0.15)',fontSize:11,color:'#fcd34d',lineHeight:1.8 }}>
+                  <span style={{ color:'#fbbf24' }}>■</span> 銅線（Copper）<br/>
+                  <span style={{ color:'#60a5fa' }}>■</span> 電子ヘッド<br/>
+                  <span style={{ color:'#ef4444' }}>■</span> 電子テール<br/>
+                  <span style={{ color:'#1e1b4b' }}>■</span> 空（Empty）
+                </div>
+                <ResetBtn onClick={()=>{wireworldRef.current=new WireWorld(300,300);}} label="New Circuit" />
+              </div>
+            )}
+
+            {modelId==='boids' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="Separation" value={boids.separation} display={boids.separation.toFixed(2)} min={0.01} max={0.2} step={0.01} accent={model.accent} onChange={(v)=>setBoids({...boids,separation:v})} />
+                <SliderField label="Alignment" value={boids.alignment} display={boids.alignment.toFixed(2)} min={0.0} max={3.0} step={0.05} accent={model.accent} onChange={(v)=>setBoids({...boids,alignment:v})} />
+                <SliderField label="Cohesion" value={boids.cohesion} display={boids.cohesion.toFixed(2)} min={0.0} max={3.0} step={0.05} accent={model.accent} onChange={(v)=>setBoids({...boids,cohesion:v})} />
+                <SliderField label="Radius" value={boids.radius} display={`${boids.radius}px`} min={10} max={120} step={5} accent={model.accent} onChange={(v)=>setBoids({...boids,radius:v})} />
+                <ResetBtn onClick={()=>{boidsRef.current=new Boids(400,400);}} label="Respawn Flock" />
+              </div>
+            )}
+
+            {modelId==='belousovzhabotinsky' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="k₁ (reaction)" value={bz.k1} display={bz.k1.toFixed(1)} min={0.5} max={5.0} step={0.1} accent={model.accent} onChange={(v)=>setBz({...bz,k1:v})} />
+                <SliderField label="k₂ (inhibition)" value={bz.k2} display={bz.k2.toFixed(1)} min={0.5} max={6.0} step={0.1} accent={model.accent} onChange={(v)=>setBz({...bz,k2:v})} />
+                <SliderField label="Diffusion A" value={bz.diffA} display={bz.diffA.toFixed(2)} min={0.01} max={0.5} step={0.01} accent={model.accent} onChange={(v)=>setBz({...bz,diffA:v})} />
+                <ResetBtn onClick={()=>{bzRef.current=new BelousovZhabotinsky(300,300);}} label="New Reaction" />
+              </div>
+            )}
+
+            {modelId==='forestfire' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="Tree Density" value={forest.density} display={forest.density.toFixed(2)} min={0.1} max={0.9} step={0.05} accent={model.accent} onChange={(v)=>setForest({...forest,density:v})} />
+                <SliderField label="Regrowth Rate ×10⁻³" value={forest.regrowth} display={forest.regrowth.toFixed(1)} min={0.1} max={5.0} step={0.1} accent={model.accent} onChange={(v)=>setForest({...forest,regrowth:v})} />
+                <SliderField label="Lightning ×10⁻⁵" value={forest.lightning} display={forest.lightning.toFixed(1)} min={0.5} max={20} step={0.5} accent={model.accent} onChange={(v)=>setForest({...forest,lightning:v})} />
+                <div style={{ padding:'10px 14px',borderRadius:8,background:'rgba(34,197,94,0.05)',border:'1px solid rgba(34,197,94,0.15)',fontSize:11,color:'#86efac',lineHeight:1.8 }}>
+                  <span style={{ color:'#22c55e' }}>■</span> 木　<span style={{ color:'#ef4444' }}>■</span> 燃焼中<br/>
+                  <span style={{ color:'#6b7280' }}>■</span> 灰　<span style={{ color:'#0a0a0f' }}>■</span> 空地
+                </div>
+                <ResetBtn onClick={()=>{forestRef.current=new ForestFire(300,300);}} label="New Forest" />
+              </div>
+            )}
+
+            {modelId==='percolation' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="Open Probability (p)" value={percol.p} display={percol.p.toFixed(2)} min={0.3} max={0.9} step={0.01} accent={model.accent} onChange={(v)=>setPercol({...percol,p:v})} />
+                <div style={{ padding:'10px 14px',borderRadius:8,background:'rgba(99,102,241,0.05)',border:'1px solid rgba(99,102,241,0.15)',fontSize:11,color:'#a5b4fc',lineHeight:1.8 }}>
+                  臨界確率 pc ≈ 0.593<br/>
+                  <span style={{ color:'#60a5fa' }}>■</span> 浸透クラスター（上から到達）<br/>
+                  <span style={{ color:'#e2e8f0' }}>■</span> 未到達の開孔
+                </div>
+                <ResetBtn onClick={()=>percolRef.current?.regenerate(percol.p)} label="Regenerate" />
+              </div>
+            )}
+
+            {modelId==='lenia' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="Growth Center (μ)" value={lenia.mu} display={lenia.mu.toFixed(3)} min={0.05} max={0.4} step={0.005} accent={model.accent} onChange={(v)=>setLenia({...lenia,mu:v})} />
+                <SliderField label="Growth Width (σ)" value={lenia.sigma} display={lenia.sigma.toFixed(3)} min={0.005} max={0.08} step={0.001} accent={model.accent} onChange={(v)=>setLenia({...lenia,sigma:v})} />
+                <SliderField label="Time Step (dt)" value={lenia.dt} display={lenia.dt.toFixed(2)} min={0.01} max={0.5} step={0.01} accent={model.accent} onChange={(v)=>setLenia({...lenia,dt:v})} />
+                <ResetBtn onClick={()=>{leniaRef.current=new Lenia(256,256);}} label="New Organism" />
+              </div>
+            )}
+
+            {modelId==='schelling' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="Tolerance Threshold" value={schell.tolerance} display={schell.tolerance.toFixed(2)} min={0.1} max={0.9} step={0.05} accent={model.accent} onChange={(v)=>setSchell({...schell,tolerance:v})} />
+                <div style={{ padding:'10px 14px',borderRadius:8,background:'rgba(245,158,11,0.05)',border:'1px solid rgba(245,158,11,0.15)',fontSize:11,color:'#fcd34d',lineHeight:1.8 }}>
+                  <span style={{ color:'#f97316' }}>■</span> グループA　<span style={{ color:'#818cf8' }}>■</span> グループB<br/>
+                  Tolerance: 同種の隣人の最小割合
+                </div>
+                <ResetBtn onClick={()=>{schellingRef.current=new SchellingSegregation(300,300);}} label="New Population" />
+              </div>
+            )}
+
+            {modelId==='sandpile' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="Drop Rate (grains/frame)" value={pile.rate} display={`${pile.rate}`} min={1} max={50} step={1} accent={model.accent} onChange={(v)=>setPile({...pile,rate:v})} />
+                <div style={{ padding:'10px 14px',borderRadius:8,background:'rgba(168,85,247,0.05)',border:'1px solid rgba(168,85,247,0.15)',fontSize:11,color:'#d8b4fe',lineHeight:1.8 }}>
+                  砂粒は中心に落ち、高さ≥4で崩壊（avalanche）<br/>
+                  自己組織化臨界状態（SOC）を形成
+                </div>
+                <ResetBtn onClick={()=>{sandpileRef.current=new AbelianSandpile(300,300);}} label="Reset Pile" />
+              </div>
+            )}
+
+            {modelId==='murmuration' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="Separation" value={murmu.sep} display={murmu.sep.toFixed(2)} min={0.01} max={0.2} step={0.01} accent={model.accent} onChange={(v)=>setMurmu({...murmu,sep:v})} />
+                <SliderField label="Alignment" value={murmu.ali} display={murmu.ali.toFixed(2)} min={0.0} max={3.0} step={0.05} accent={model.accent} onChange={(v)=>setMurmu({...murmu,ali:v})} />
+                <SliderField label="Cohesion" value={murmu.coh} display={murmu.coh.toFixed(2)} min={0.0} max={3.0} step={0.05} accent={model.accent} onChange={(v)=>setMurmu({...murmu,coh:v})} />
+                <ResetBtn onClick={()=>{murmuRef.current=new Murmuration(400,400);}} label="Respawn" />
+              </div>
+            )}
+
+            {modelId==='hodgepodge' && (
+              <div style={{ display:'flex',flexDirection:'column',gap:20 }}>
+                <SliderField label="k₁ (infection)" value={hodge.k1} display={hodge.k1.toFixed(1)} min={0.5} max={6.0} step={0.5} accent={model.accent} onChange={(v)=>setHodge({...hodge,k1:v})} />
+                <SliderField label="k₂ (recovery)" value={hodge.k2} display={hodge.k2.toFixed(1)} min={0.5} max={6.0} step={0.5} accent={model.accent} onChange={(v)=>setHodge({...hodge,k2:v})} />
+                <SliderField label="g (illness effect)" value={hodge.gParam} display={`${hodge.gParam}`} min={1} max={10} step={1} accent={model.accent} onChange={(v)=>setHodge({...hodge,gParam:v})} />
+                <div style={{ padding:'10px 14px',borderRadius:8,background:'rgba(236,72,153,0.05)',border:'1px solid rgba(236,72,153,0.15)',fontSize:11,color:'#f9a8d4',lineHeight:1.8 }}>
+                  Gerhardt-Schuster モデル<br/>
+                  螺旋波・複雑な伝播パターン
+                </div>
+                <ResetBtn onClick={()=>{hodgepodgeRef.current=new HodgepodgeMachine(300,300);}} label="Reset" />
+              </div>
+            )}
           </div>
         </div>
         )}
@@ -804,19 +1264,59 @@ function ResetBtn({ onClick, label }: { onClick: () => void; label: string }) {
 }
 
 // ─────────────────────────────────────────────
+// Color mode switcher component
+// ─────────────────────────────────────────────
+function ColorModeSwitcher({ colorMode, setColorMode }: {
+  colorMode: ColorMode; setColorMode: (m: ColorMode) => void;
+}) {
+  return (
+    <div style={{ display:'flex',alignItems:'center',gap:4,padding:'3px',borderRadius:10,border:'1px solid rgba(255,255,255,0.1)',background:'rgba(255,255,255,0.04)' }}>
+      {COLOR_MODE_LABELS.map(({ id, label }) => {
+        const active = colorMode === id;
+        const dotColor = id==='navy'?'#4a7ab5':id==='orange'?'#e07020':id==='grayscale'?'#888':'#6ee';
+        return (
+          <button
+            key={id}
+            onClick={() => setColorMode(id)}
+            title={label}
+            style={{
+              padding:'4px 10px',borderRadius:7,border:'none',cursor:'pointer',fontSize:11,fontWeight:600,
+              transition:'all 0.15s ease',
+              background: active ? 'rgba(255,255,255,0.1)' : 'transparent',
+              color: active ? '#e2e8f0' : '#64748b',
+              display:'flex',alignItems:'center',gap:5,
+            }}
+          >
+            <span style={{ width:7,height:7,borderRadius:'50%',background:dotColor,flexShrink:0,opacity:active?1:0.5 }} />
+            <span className="btn-pill-label">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // Gallery View
 // ─────────────────────────────────────────────
-function GalleryView({ onSelect }: { onSelect: (id: ModelId) => void }) {
+function GalleryView({ onSelect, colorMode, setColorMode }: {
+  onSelect: (id: ModelId) => void;
+  colorMode: ColorMode;
+  setColorMode: (m: ColorMode) => void;
+}) {
   return (
     <div style={{ minHeight:'100vh',display:'flex',flexDirection:'column' }}>
       <header style={{
         padding:'60px 40px 40px',textAlign:'center',
         background:'radial-gradient(ellipse at 50% 0%, rgba(79,110,247,0.12) 0%, transparent 70%)',
-        borderBottom:'1px solid var(--border)',
+        borderBottom:'1px solid var(--border)',position:'relative',
       }}>
+        <div style={{ position:'absolute',top:20,right:24 }}>
+          <ColorModeSwitcher colorMode={colorMode} setColorMode={setColorMode} />
+        </div>
         <div style={{
           display:'inline-flex',alignItems:'center',gap:8,padding:'4px 14px',borderRadius:9999,
-          border:'1px solid rgba(79,110,247,0.3)',background:'rgba(79,110,247,0.08)',
+          border:'1px solid rgba(190, 197, 233, 0.3)',background:'rgba(79,110,247,0.08)',
           fontSize:11,fontWeight:600,letterSpacing:'0.1em',textTransform:'uppercase',color:'#818cf8',marginBottom:24,
         }}>
           <span style={{ width:6,height:6,borderRadius:'50%',background:'#818cf8',display:'inline-block' }} />
@@ -830,8 +1330,7 @@ function GalleryView({ onSelect }: { onSelect: (id: ModelId) => void }) {
           Self-Organization Lab
         </h1>
         <p style={{ fontSize:16,color:'#64748b',maxWidth:560,margin:'0 auto',lineHeight:1.7 }}>
-          秩序はどのように生まれるか。15の自己組織化原理を、<br />
-          リアルタイムシミュレーションで探索する。
+          秩序はどのように生まれるか。
         </p>
       </header>
 
@@ -858,8 +1357,14 @@ function GalleryView({ onSelect }: { onSelect: (id: ModelId) => void }) {
 // ─────────────────────────────────────────────
 export default function App() {
   const [selected, setSelected] = useState<ModelId | null>(null);
-  if (selected) {
-    return <SimulationView modelId={selected} onBack={() => setSelected(null)} />;
-  }
-  return <GalleryView onSelect={(id) => setSelected(id)} />;
+  const [colorMode, setColorMode] = useState<ColorMode>('color');
+  return (
+    <ColorModeContext.Provider value={colorMode}>
+      {selected ? (
+        <SimulationView modelId={selected} onBack={() => setSelected(null)} colorMode={colorMode} setColorMode={setColorMode} />
+      ) : (
+        <GalleryView onSelect={(id) => setSelected(id)} colorMode={colorMode} setColorMode={setColorMode} />
+      )}
+    </ColorModeContext.Provider>
+  );
 }
